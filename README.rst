@@ -11,7 +11,7 @@
     :alt: Requirements Status
 
 .. image:: https://readthedocs.org/projects/openapi-client-generator/badge/?version=latest
-    :target: http://typeit.readthedocs.org/en/latest/
+    :target: https://openapi-client-generator.readthedocs.io/en/latest/
     :alt: Documentation Status
 
 .. image:: http://img.shields.io/pypi/v/openapi-client-generator.svg
