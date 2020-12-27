@@ -47,7 +47,9 @@ Documentation is hosted on ReadTheDocs: https://openapi-client-generator.readthe
 Test framework
 --------------
 
-Run existing test suite with
+The project uses `Nix <https://nixos.org/>`_ for bootstrapping its dev environment.
+
+You can run existing test suite with
 
 .. code::
 

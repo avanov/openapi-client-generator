@@ -1,0 +1,2 @@
+""" Generates client file structure
+"""

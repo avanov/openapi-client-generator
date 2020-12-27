@@ -1,5 +1,6 @@
 import io
 import pytest
+import tempfile as tf
 from openapi_client_generator.cli import main
 
 
@@ -10,6 +11,7 @@ from openapi_client_generator.cli import main
 def test_cli(typ, input, output):
     ins = io.StringIO(input)
     out = io.StringIO()
-    main(args=["gen"], in_channel=ins, out_channel=out)
-    out.seek(0)
-    assert out.read() == output
+    with tf.TemporaryDirectory() as tempdir:
+        main(args=["gen", "-o", tempdir, "-n", "test_client"], in_channel=ins, out_channel=out)
+        out.seek(0)
+        assert out.read() == output

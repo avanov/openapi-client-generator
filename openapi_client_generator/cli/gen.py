@@ -2,13 +2,17 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Mapping
+from typing import Mapping
 
 
 def setup(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
-    sub = subparsers.add_parser('gen', help='Generate client for a provided schema (JSON, YAML)')
+    sub = subparsers.add_parser('gen', help='Generate client for a provided schema (JSON, YAML).')
     sub.add_argument('-s', '--source', help="Path to a spec (JSON, YAML). "
                                             "If not specified, then the data will be read from stdin.")
+    sub.add_argument('-o', '--out-dir', required=True,
+                     help="Output directory that will contain a newly generated Python client.")
+    sub.add_argument('-n', '--name', required=True,
+                     help="Name of a newly generated Python client (package name).")
     sub.set_defaults(run_cmd=main)
     return sub
 
