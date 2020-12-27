@@ -1,0 +1,2 @@
+# Third-party requirements that the library uses in CLI
+PyYAML>=5.3.1,<5.4
