@@ -1,7 +1,7 @@
 from typing import NamedTuple
 from typeit import TypeConstructor
 
-from {{ package_name }}.common import *
+from example_client.common import *
 
 
 __all__ = ('Params', 'Request', 'Response', 'request')

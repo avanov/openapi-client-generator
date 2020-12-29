@@ -12,6 +12,7 @@ __pycache__/
 .local/
 build/
 dist/
+out/
 *.egg-info/
 
 docs/_build

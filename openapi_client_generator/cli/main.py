@@ -4,14 +4,13 @@ import sys
 from pkg_resources import get_distribution
 
 from . import gen
+from ..info import DISTRIBUTION_NAME
 
-
-NAME = "openapi-client-generator"
 
 def main(args=None, in_channel=sys.stdin, out_channel=sys.stdout):
     parser = argparse.ArgumentParser(description='OpenAPI Client Generator')
     parser.add_argument('-V', '--version', action='version',
-                        version=f'{NAME} {get_distribution(NAME).version}')
+                        version=f'{DISTRIBUTION_NAME} {get_distribution(DISTRIBUTION_NAME).version}')
     subparsers = parser.add_subparsers(title='sub-commands',
                                        description='valid sub-commands',
                                        help='additional help',

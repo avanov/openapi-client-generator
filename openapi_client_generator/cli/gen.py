@@ -3,10 +3,16 @@ import json
 import sys
 from pathlib import Path
 from typing import Mapping
+from shutil import rmtree
+from itertools import islice
 
 from openapi_type import parse_spec
 
 from ..codegen import filegen
+
+
+def is_empty_dir(p: Path) -> bool:
+    return p.is_dir() and not bool(list(islice(p.iterdir(), 1)))
 
 
 def setup(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -17,6 +23,9 @@ def setup(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
                      help="Output directory that will contain a newly generated Python client.")
     sub.add_argument('-n', '--name', required=True,
                      help="Name of a newly generated Python client (package name).")
+    sub.add_argument('-f', '--force-overwrite', required=False, action='store_true',
+                     help="Overwrite existing files and directories if they already exist"
+                     )
     sub.set_defaults(run_cmd=main)
     return sub
 
@@ -34,11 +43,27 @@ def main(args: argparse.Namespace, in_channel=sys.stdin, out_channel=sys.stdout)
     spec = parse_spec(python_data)
 
     layout = filegen.client_layout(spec, Path(args.out_dir), args.name)
-    print(layout)
+
+    can_proceed = _overwrite_if_allowed_and_required(args, layout.root)
+    if not can_proceed:
+        return
+
     filegen.generate_from_layout(layout)
 
-    json.dump(python_data, out_channel)
-    out_channel.write('\n')
+    out_channel.write('Done.\n')
+
+
+def _overwrite_if_allowed_and_required(args: argparse.Namespace, root: Path) -> bool:
+    can_proceed = True
+    if root.exists() and not is_empty_dir(root):
+        if args.force_overwrite:
+            unlink = lambda: rmtree(str(root)) if root.is_dir() else root.unlink
+            unlink()
+        else:
+            sys.stderr.write(f"Filepath already exists and is not empty: {str(root)}\n"
+                             f"Use -f flag to explicitly allow overwriting it.\n")
+            can_proceed = False
+    return can_proceed
 
 
 def _read_data(fd) -> Mapping:

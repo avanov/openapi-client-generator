@@ -8,16 +8,25 @@ PROJECT_ROOT              := $(PROJECT_MKFILE_DIR)
 
 BUILD_DIR                 := $(PROJECT_ROOT)/build
 DIST_DIR                  := $(PROJECT_ROOT)/dist
+TEST_DIR                  := $(PROJECT_ROOT)/tests
 
-PROJECT=openapi_client_generator
+CLI                       := openapi-client-generator
 
-test: typecheck
-	pytest -s  --cov=openapi_client_generator $(PROJECT_ROOT)/tests
 
 typecheck:
 	mypy --config-file setup.cfg --package $(PROJECT_NAME)
+	mypy --config-file setup.cfg $(TEST_DIR)/example_client/example_client
 
-publish: test
+
+test: typecheck
+	pytest -s  --cov=openapi_client_generator $(TEST_DIR)
+
+
+generate-example-client:
+	$(CLI) gen -f -s "$(TEST_DIR)/example-client-spec.json" -o "$(TEST_DIR)/example_client" -n example-client
+
+
+publish: generate-example-client test
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 	python $(PROJECT_ROOT)/setup.py sdist bdist_wheel
 	twine upload $(DIST_DIR)/*

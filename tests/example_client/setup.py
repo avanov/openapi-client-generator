@@ -36,7 +36,7 @@ with (here / 'README.md').open() as f:
 # Setup
 # ----------------------------
 
-setup(name='{{ client_name }}',
+setup(name='example-client',
       version='0.0.1',
       description='OpenAPI Client',
       long_description=README,
