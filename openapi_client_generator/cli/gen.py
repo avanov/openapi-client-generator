@@ -6,7 +6,7 @@ from typing import Mapping
 
 from openapi_type import parse_spec
 
-from ..codegen.filegen import client_layout
+from ..codegen import filegen
 
 
 def setup(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -33,8 +33,9 @@ def main(args: argparse.Namespace, in_channel=sys.stdin, out_channel=sys.stdout)
 
     spec = parse_spec(python_data)
 
-    layout = client_layout(spec, Path(args.out_dir), args.name)
+    layout = filegen.client_layout(spec, Path(args.out_dir), args.name)
     print(layout)
+    filegen.generate_from_layout(layout)
 
     json.dump(python_data, out_channel)
     out_channel.write('\n')

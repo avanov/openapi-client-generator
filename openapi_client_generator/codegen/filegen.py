@@ -1,24 +1,34 @@
 """ Generates client file structure
 """
-from inflection import underscore
+from string import digits
 from pathlib import Path
-from typing import NamedTuple, Mapping, Generator
+from typing import NamedTuple, Mapping
 
+from inflection import underscore
 import openapi_type as oas
+
+from . import templates
 
 
 README = Path('README.txt')
 MANIFEST = Path('MANIFEST.in')
 SETUP_PY = Path('setup.py')
+REQUIREMENTS = Path('requirements') / 'minimal.txt'
+
+
+class Binding(NamedTuple):
+    layout: Path
+    template: templates.Template
 
 
 class ProjectLayout(NamedTuple):
     root: Path
     client_root: Path
-    endpoints: Mapping[Path, oas.PathItem]
-    readme: Path
-    manifest: Path
-    setup_py: Path
+    endpoints: Mapping[Binding, oas.PathItem]
+    readme: Binding
+    manifest: Binding
+    setup_py: Binding
+    requirements: Binding
 
 
 def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
@@ -26,7 +36,7 @@ def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
     :param spec: parsed OpenAPI Spec
     :param root: client root path
     :param name: client python package name
-    :return:
+    :return: client layout representation as a type
     """
     name = underscore(name)
     client_root = root / name
@@ -35,14 +45,15 @@ def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
     endpoints = {}
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
-        endpoints[endpoints_root / pth] = item
+        endpoints[Binding(endpoints_root / pth, templates.ENDPOINT)] = item
 
     return ProjectLayout(
         root=root,
         client_root=client_root,
-        readme=root / README,
-        manifest=root / MANIFEST,
-        setup_py=root / SETUP_PY,
+        readme=Binding(root / README, templates.README),
+        manifest=Binding(root / MANIFEST, templates.MANIFEST),
+        setup_py=Binding(root / SETUP_PY, templates.SETUP_PY),
+        requirements=Binding(root / REQUIREMENTS, templates.REQUIREMENTS),
         endpoints=endpoints
     )
 
@@ -73,11 +84,11 @@ def pythonize_path_segment(seg: str) -> str:
     if is_placeholder:
         rv = f'by_{rv}'
     else:
-        try:
-            _ = int(rv)
-        except ValueError:
-            pass
-        else:
+        # version tags are usually numeric
+        if rv[0] in digits:
             rv = f'v{rv}'
     return rv
 
+
+def generate_from_layout(l: ProjectLayout) -> None:
+    print('Done.')
