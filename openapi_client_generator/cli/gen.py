@@ -4,6 +4,10 @@ import sys
 from pathlib import Path
 from typing import Mapping
 
+from openapi_type import parse_spec
+
+from ..codegen.filegen import client_layout
+
 
 def setup(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     sub = subparsers.add_parser('gen', help='Generate client for a provided schema (JSON, YAML).')
@@ -26,6 +30,11 @@ def main(args: argparse.Namespace, in_channel=sys.stdin, out_channel=sys.stdout)
     except TypeError:
         # source is None, read from stdin
         python_data = _read_data(in_channel)
+
+    spec = parse_spec(python_data)
+
+    layout = client_layout(spec, Path(args.out_dir), args.name)
+    print(layout)
 
     json.dump(python_data, out_channel)
     out_channel.write('\n')
