@@ -2,8 +2,9 @@
 """
 from string import digits
 from pathlib import Path
-from typing import NamedTuple, Mapping
+from typing import NamedTuple, Mapping, Any
 
+from pyrsistent import pmap
 from inflection import underscore
 import openapi_type as oas
 
@@ -15,10 +16,13 @@ MANIFEST = Path('MANIFEST.in')
 SETUP_PY = Path('setup.py')
 REQUIREMENTS = Path('requirements') / 'minimal.txt'
 
+EMPTY_CONTEXT: Mapping[str, Any] = pmap()
+
 
 class Binding(NamedTuple):
     layout: Path
     template: templates.Template
+    context: Mapping[str, Any]
 
 
 class ProjectLayout(NamedTuple):
@@ -38,22 +42,22 @@ def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
     :param name: client python package name
     :return: client layout representation as a type
     """
-    name = underscore(name)
-    client_root = root / name
+    py_name = underscore(name)
+    client_root = root / py_name
     endpoints_root = client_root / "service"
 
     endpoints = {}
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
-        endpoints[Binding(endpoints_root / pth, templates.ENDPOINT)] = item
+        endpoints[Binding(endpoints_root / pth, templates.ENDPOINT, EMPTY_CONTEXT)] = item
 
     return ProjectLayout(
         root=root,
         client_root=client_root,
-        readme=Binding(root / README, templates.README),
-        manifest=Binding(root / MANIFEST, templates.MANIFEST),
-        setup_py=Binding(root / SETUP_PY, templates.SETUP_PY),
-        requirements=Binding(root / REQUIREMENTS, templates.REQUIREMENTS),
+        readme=Binding(root / README, templates.README, EMPTY_CONTEXT),
+        manifest=Binding(root / MANIFEST, templates.MANIFEST, {'package_name': name}),
+        setup_py=Binding(root / SETUP_PY, templates.SETUP_PY, EMPTY_CONTEXT),
+        requirements=Binding(root / REQUIREMENTS, templates.REQUIREMENTS, EMPTY_CONTEXT),
         endpoints=endpoints
     )
 
@@ -91,4 +95,12 @@ def pythonize_path_segment(seg: str) -> str:
 
 
 def generate_from_layout(l: ProjectLayout) -> None:
-    print('Done.')
+    for binding in [l.readme, l.manifest, l.setup_py, l.requirements]:
+        _generate_file(binding)
+
+
+def _generate_file(binding: Binding) -> None:
+    binding.layout.parent.mkdir(exist_ok=True)
+    binding.layout.touch(exist_ok=False)
+    with binding.layout.open('w') as f:
+        binding.template.stream(binding.context).dump(f)
