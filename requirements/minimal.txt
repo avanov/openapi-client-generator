@@ -1,3 +1,5 @@
 typeit>=3.9.1.2
 openapi-type>=0.0.3
 jinja2
+pyrsistent
+inflection

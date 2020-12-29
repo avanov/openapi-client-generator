@@ -25,10 +25,13 @@ class Binding(NamedTuple):
     context: Mapping[str, Any]
 
 
+Endpoints = Mapping[Binding, oas.PathItem]
+
+
 class ProjectLayout(NamedTuple):
     root: Path
     client_root: Path
-    endpoints: Mapping[Binding, oas.PathItem]
+    endpoints: Endpoints
     readme: Binding
     manifest: Binding
     setup_py: Binding
@@ -97,6 +100,12 @@ def pythonize_path_segment(seg: str) -> str:
 def generate_from_layout(l: ProjectLayout) -> None:
     for binding in [l.readme, l.manifest, l.setup_py, l.requirements]:
         _generate_file(binding)
+    _generate_endpoints(l.endpoints)
+
+
+def _generate_endpoints(e: Endpoints) -> None:
+    for py_module, data in e.items():
+        print(py_module)
 
 
 def _generate_file(binding: Binding) -> None:
