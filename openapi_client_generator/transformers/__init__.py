@@ -2,7 +2,7 @@
 """
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping, Sequence
+from typing import NamedTuple, Mapping, Sequence, Generator, Tuple
 
 import openapi_type as oas
 from inflection import underscore
@@ -37,18 +37,34 @@ class EndpointSegments(NamedTuple):
         return '/'.join(x.original for x in self.segments)
 
 
+SupportedMethods = Generator[Tuple[str, oas.Operation], None, None]
+
+
+class Endpoint(NamedTuple):
+    path_item: oas.PathItem
+    """ original PathItem from OpenAPI spec
+    """
+    supported_methods: SupportedMethods
+
+
+
 class SpecMeta(NamedTuple):
     """ A post-processed OpenAPI specification that is convenient to use for codegen
     """
     spec: oas.OpenAPI
     """ original spec
     """
-    paths: Mapping[EndpointSegments, oas.PathItem]
+    paths: Mapping[EndpointSegments, Endpoint]
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = pmap({
-        api_path_to_filepath(path): item for path, item in spec.paths.items()
+        api_path_to_filepath(path):
+            Endpoint(
+                path_item=item,
+                supported_methods=iter_supported_methods(item)
+            )
+        for path, item in spec.paths.items()
     })
     return SpecMeta(
         spec=spec,
@@ -92,3 +108,17 @@ def pythonize_path_segment(seg: str) -> EndpointSegment:
         segment=rv,
         is_placeholder=is_placeholder
     )
+
+
+def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
+    methods = (path.head,
+               path.get,
+               path.post,
+               path.put,
+               path.patch,
+               path.delete,
+               path.trace)
+    for name, method in path._asdict().items():
+        if not method or method not in methods:
+            continue
+        yield name, method

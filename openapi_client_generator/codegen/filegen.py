@@ -114,7 +114,7 @@ def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
 def endpoints_bindings(meta: SpecMeta, package_name: str, endpoints_root: Path) -> Endpoints:
     endpoints = {}
     for pth, item in meta.paths.items():
-        for name, method in _iter_supported_methods(item):
+        for name, method in item.supported_methods:
             target = endpoints_root / pth.as_fs_path() / f'{name}.py'
             ctx = EndpointContext(
                 package_name=package_name,
@@ -164,17 +164,3 @@ def _generate_file(binding: Binding) -> None:
 def _copy_common_library(common_root: Path) -> None:
     dist = get_distribution(DISTRIBUTION_NAME)
     copytree(str(Path(dist.location) / PACKAGE_NAME / 'common'), str(common_root))
-
-
-def _iter_supported_methods(path: oas.PathItem) -> Generator[Tuple[str, oas.Operation], None, None]:
-    methods = (path.head,
-               path.get,
-               path.post,
-               path.put,
-               path.patch,
-               path.delete,
-               path.trace)
-    for name, method in path._asdict().items():
-        if not method or method not in methods:
-            continue
-        yield name, method

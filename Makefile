@@ -23,15 +23,15 @@ test: typecheck
 	pytest -s  --cov=openapi_client_generator $(TEST_DIR)
 
 
-generate-example-client:
+example-client:
 	$(CLI) gen -f -s "$(TEST_DIR)/example-client-spec.json" -o "$(TEST_DIR)/example_client" -n example-client
 
 
-publish: generate-example-client test
+publish: example-client test
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 	python $(PROJECT_ROOT)/setup.py sdist bdist_wheel
 	twine upload $(DIST_DIR)/*
 
 
-test-all: | generate-example-client test
+test-all: | example-client test
 	@echo "Done."
