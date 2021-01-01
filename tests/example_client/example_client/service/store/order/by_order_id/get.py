@@ -26,7 +26,7 @@ class Headers(NamedTuple):
 
 
 METHOD = http.Method(__name__.split('.')[-1])
-URL = "store/order/{orderId}"
+URL = "store/order/{order_id}"
 
 
 parse_request, serialize_request = TypeConstructor ^ Request

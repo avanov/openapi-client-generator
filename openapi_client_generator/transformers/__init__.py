@@ -2,7 +2,7 @@
 """
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping, Sequence, Generator, Tuple
+from typing import NamedTuple, Mapping, Sequence, Generator, Any, Optional
 
 import openapi_type as oas
 from inflection import underscore
@@ -18,8 +18,8 @@ class EndpointSegment(NamedTuple):
     segment: str
     """ normalized value
     """
-    is_placeholder: bool
-    """ whether used as a placeholder
+    placeholder: Optional[str] = None
+    """ if used as a placeholder, the value contains a string representation of it
     """
 
 
@@ -34,10 +34,19 @@ class EndpointSegments(NamedTuple):
     def as_endpoint_url(self) -> str:
         """ Represent the segments as a endpoint url
         """
-        return '/'.join(x.original for x in self.segments)
+        return '/'.join(x.placeholder if x.placeholder else x.original for x in self.segments)
 
 
-SupportedMethods = Generator[Tuple[str, oas.Operation], None, None]
+class EndpointMethod(NamedTuple):
+    name: str
+    method: oas.Operation
+    params_type: Mapping[str, Any] = pmap()
+    request_type: Mapping[str, Any] = pmap()
+    response_type: Mapping[str, Any] = pmap()
+    headers_type: Mapping[str, Any] = pmap()
+
+
+SupportedMethods = Generator[EndpointMethod, None, None]
 
 
 class Endpoint(NamedTuple):
@@ -45,7 +54,6 @@ class Endpoint(NamedTuple):
     """ original PathItem from OpenAPI spec
     """
     supported_methods: SupportedMethods
-
 
 
 class SpecMeta(NamedTuple):
@@ -58,14 +66,15 @@ class SpecMeta(NamedTuple):
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
-    paths = pmap({
-        api_path_to_filepath(path):
-            Endpoint(
-                path_item=item,
-                supported_methods=iter_supported_methods(item)
-            )
-        for path, item in spec.paths.items()
-    })
+    paths = {}
+    for path, item in spec.paths.items():
+        pth = api_path_to_filepath(path)
+        endpoint = Endpoint(
+            path_item=item,
+            supported_methods=iter_supported_methods(item)
+        )
+        paths[pth] = endpoint
+
     return SpecMeta(
         spec=spec,
         paths=paths
@@ -79,7 +88,7 @@ def api_path_to_filepath(api_path: str, sep: str = '/') -> EndpointSegments:
     """
     segments = [pythonize_path_segment(x) for x in api_path.split(sep) if x.strip()]
     if not segments:
-        segments = [EndpointSegment('/', 'root', False)]
+        segments = [EndpointSegment('/', 'root', None)]
     return EndpointSegments(pvector(segments))
 
 
@@ -95,7 +104,9 @@ def pythonize_path_segment(seg: str) -> EndpointSegment:
         if char in remove:
             continue
         final.append(char)
-    rv = underscore(''.join(final))
+
+    final_underscored = underscore(''.join(final))
+    rv = final_underscored
     if is_placeholder:
         rv = f'by_{rv}'
     else:
@@ -106,7 +117,7 @@ def pythonize_path_segment(seg: str) -> EndpointSegment:
     return EndpointSegment(
         original=seg,
         segment=rv,
-        is_placeholder=is_placeholder
+        placeholder=f'{{{final_underscored}}}' if is_placeholder else None
     )
 
 
@@ -121,4 +132,7 @@ def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
     for name, method in path._asdict().items():
         if not method or method not in methods:
             continue
-        yield name, method
+        yield EndpointMethod(
+            name=name,
+            method=method,
+        )

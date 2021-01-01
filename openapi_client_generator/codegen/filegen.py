@@ -3,7 +3,7 @@
 from itertools import chain
 from pathlib import Path
 from shutil import copytree
-from typing import NamedTuple, Mapping, Generator, Tuple, Iterable, Union
+from typing import NamedTuple, Mapping, Iterable, Union
 from pkg_resources import get_distribution
 
 from inflection import underscore
@@ -11,7 +11,7 @@ import openapi_type as oas
 
 from . import templates
 from ..info import DISTRIBUTION_NAME, PACKAGE_NAME
-from ..transformers import SpecMeta, openapi_to_codegen_metadata
+from ..transformers import SpecMeta, openapi_to_codegen_metadata, EndpointMethod
 
 
 README       = Path('README.md')
@@ -66,7 +66,7 @@ class Binding(NamedTuple):
     context: Context
 
 
-Endpoints = Mapping[Binding, oas.Operation]
+Endpoints = Mapping[Binding, EndpointMethod]
 
 
 class ProjectLayout(NamedTuple):
@@ -114,15 +114,15 @@ def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
 def endpoints_bindings(meta: SpecMeta, package_name: str, endpoints_root: Path) -> Endpoints:
     endpoints = {}
     for pth, item in meta.paths.items():
-        for name, method in item.supported_methods:
-            target = endpoints_root / pth.as_fs_path() / f'{name}.py'
+        for method in item.supported_methods:
+            target = endpoints_root / pth.as_fs_path() / f'{method.name}.py'
             ctx = EndpointContext(
                 package_name=package_name,
                 endpoint_url=pth.as_endpoint_url(),
-                params_type=templates.PARAMS_TYPE.render({}),
-                request_type=templates.REQUEST_TYPE.render({}),
-                response_type=templates.RESPONSE_TYPE.render({}),
-                headers_type=templates.HEADERS_TYPE.render({}),
+                params_type=templates.PARAMS_TYPE.render(method.params_type),
+                request_type=templates.REQUEST_TYPE.render(method.request_type),
+                response_type=templates.RESPONSE_TYPE.render(method.response_type),
+                headers_type=templates.HEADERS_TYPE.render(method.headers_type),
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
             # make sure there's `__init__.py` in every sub-package

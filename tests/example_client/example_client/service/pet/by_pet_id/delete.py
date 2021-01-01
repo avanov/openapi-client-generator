@@ -26,7 +26,7 @@ class Headers(NamedTuple):
 
 
 METHOD = http.Method(__name__.split('.')[-1])
-URL = "pet/{petId}"
+URL = "pet/{pet_id}"
 
 
 parse_request, serialize_request = TypeConstructor ^ Request
