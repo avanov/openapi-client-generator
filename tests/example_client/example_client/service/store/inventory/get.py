@@ -26,7 +26,7 @@ class Headers(NamedTuple):
 
 
 METHOD = http.Method(__name__.split('.')[-1])
-URL = "undefined"
+URL = "store/inventory"
 
 
 parse_request, serialize_request = TypeConstructor ^ Request

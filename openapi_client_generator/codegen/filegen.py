@@ -115,10 +115,10 @@ def endpoints_bindings(meta: SpecMeta, package_name: str, endpoints_root: Path) 
     endpoints = {}
     for pth, item in meta.paths.items():
         for name, method in _iter_supported_methods(item):
-            target = endpoints_root / pth / f'{name}.py'
+            target = endpoints_root / pth.as_fs_path() / f'{name}.py'
             ctx = EndpointContext(
                 package_name=package_name,
-                endpoint_url='undefined',
+                endpoint_url=pth.as_endpoint_url(),
                 params_type=templates.PARAMS_TYPE.render({}),
                 request_type=templates.REQUEST_TYPE.render({}),
                 response_type=templates.RESPONSE_TYPE.render({}),

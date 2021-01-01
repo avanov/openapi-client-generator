@@ -2,11 +2,39 @@
 """
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping
+from typing import NamedTuple, Mapping, Sequence
 
 import openapi_type as oas
 from inflection import underscore
-from pyrsistent import pmap
+from pyrsistent import pmap, pvector
+
+
+class EndpointSegment(NamedTuple):
+    """ Represents a single endpoint segment, a.k.a. a thing between '/' symbols
+    """
+    original: str
+    """ original value
+    """
+    segment: str
+    """ normalized value
+    """
+    is_placeholder: bool
+    """ whether used as a placeholder
+    """
+
+
+class EndpointSegments(NamedTuple):
+    segments: Sequence[EndpointSegment]
+
+    def as_fs_path(self) -> Path:
+        """ Represent the segments as a filesystem path
+        """
+        return Path('/'.join(x.segment for x in self.segments))
+
+    def as_endpoint_url(self) -> str:
+        """ Represent the segments as a endpoint url
+        """
+        return '/'.join(x.original for x in self.segments)
 
 
 class SpecMeta(NamedTuple):
@@ -15,7 +43,7 @@ class SpecMeta(NamedTuple):
     spec: oas.OpenAPI
     """ original spec
     """
-    paths: Mapping[Path, oas.PathItem]
+    paths: Mapping[EndpointSegments, oas.PathItem]
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
@@ -28,18 +56,18 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     )
 
 
-def api_path_to_filepath(api_path: str, sep: str = '/') -> Path:
+def api_path_to_filepath(api_path: str, sep: str = '/') -> EndpointSegments:
     """
     :param api_path: URL path
     :param sep: separator symbol used in API path
     """
     segments = [pythonize_path_segment(x) for x in api_path.split(sep) if x.strip()]
     if not segments:
-        segments = ['root']
-    return Path('/'.join(segments))
+        segments = [EndpointSegment('/', 'root', False)]
+    return EndpointSegments(pvector(segments))
 
 
-def pythonize_path_segment(seg: str) -> str:
+def pythonize_path_segment(seg: str) -> EndpointSegment:
     placeholder = {'{', '}'}
     remove = {'.', ','} | placeholder
     is_placeholder = False
@@ -58,4 +86,9 @@ def pythonize_path_segment(seg: str) -> str:
         # version tags are usually numeric
         if rv[0] in digits:
             rv = f'v{rv}'
-    return rv
+
+    return EndpointSegment(
+        original=seg,
+        segment=rv,
+        is_placeholder=is_placeholder
+    )
