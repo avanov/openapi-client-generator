@@ -2,7 +2,7 @@ from jinja2 import Environment, PackageLoader, Template, StrictUndefined
 
 
 templates = Environment(
-    loader=PackageLoader('openapi_client_generator', 'templates'),
+    loader=PackageLoader('openapi_client_generator', 'codegen/templates'),
     undefined=StrictUndefined  # raise exception on missing variables
 )
 

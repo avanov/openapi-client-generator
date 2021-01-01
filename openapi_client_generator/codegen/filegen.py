@@ -125,7 +125,7 @@ def endpoints_bindings(meta: SpecMeta, package_name: str, endpoints_root: Path) 
                 headers_type=templates.HEADERS_TYPE.render({}),
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
-            # make sure there's __init__ in every sub-package
+            # make sure there's `__init__.py` in every sub-package
             for sub_pkg in (x for x in target.parents if x > endpoints_root):
                 endpoints[Binding(sub_pkg / '__init__.py', templates.ENDPOINT_INIT, EMPTY_CONTEXT)] = method
     return endpoints
