@@ -16,6 +16,7 @@ CLI                       := openapi-client-generator
 typecheck:
 	mypy --config-file setup.cfg --package $(PROJECT_NAME)
 	mypy --config-file setup.cfg $(TEST_DIR)/example_client/example_client
+	mypy --config-file setup.cfg $(TEST_DIR)/test_generated_client.py
 
 
 test: typecheck
@@ -30,3 +31,7 @@ publish: generate-example-client test
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 	python $(PROJECT_ROOT)/setup.py sdist bdist_wheel
 	twine upload $(DIST_DIR)/*
+
+
+test-all: | generate-example-client test
+	@echo "Done."

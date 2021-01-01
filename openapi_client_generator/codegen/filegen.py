@@ -44,6 +44,15 @@ class ProjectLayout(NamedTuple):
     requirements: Binding
 
 
+class EndpointContext(NamedTuple):
+    package_name: str
+    endpoint_url: str
+    params_type: str
+    request_type: str
+    response_type: str
+    headers_type: str
+
+
 def client_layout(spec: oas.OpenAPI, root: Path, name: str) -> ProjectLayout:
     """
     :param spec: parsed OpenAPI Spec
@@ -80,7 +89,15 @@ def endpoints_bindings(spec: oas.OpenAPI, package_name: str, endpoints_root: Pat
         pth = api_path_to_filepath(path)
         for name, method in _iter_supported_methods(item):
             target = endpoints_root / pth / f'{name}.py'
-            endpoints[Binding(target, templates.ENDPOINT, pmap({'package_name': package_name}))] = method
+            ctx = EndpointContext(
+                package_name=package_name,
+                endpoint_url='undefined',
+                params_type=templates.PARAMS_TYPE.render({}),
+                request_type=templates.REQUEST_TYPE.render({}),
+                response_type=templates.RESPONSE_TYPE.render({}),
+                headers_type=templates.HEADERS_TYPE.render({}),
+            )
+            endpoints[Binding(target, templates.ENDPOINT, pmap(ctx._asdict()))] = method
             # make sure there's __init__ in every sub-package
             for sub_pkg in (x for x in target.parents if x > endpoints_root):
                 endpoints[Binding(sub_pkg / '__init__.py', templates.ENDPOINT_INIT, EMPTY_CONTEXT)] = method
