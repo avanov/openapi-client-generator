@@ -4,7 +4,7 @@ from example_client.common import http, types
 
 
 __all__ = (
-    'request',
+    'call',
     )
 
 
@@ -29,5 +29,14 @@ URL = "user/createWithList"
 
 
 
-def request(client: http.Client) -> None:
+def call(
+    client: http.Client,
+    
+    headers: Headers = Headers(),
+) -> None:
+    url = '/'.join([client.service_url.rstrip('/'), URL.lstrip('/')])
+    response = client.make_call(
+        method=METHOD, url=url,
+        headers=headers._asdict()
+    )
     return None

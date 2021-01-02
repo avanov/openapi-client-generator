@@ -2,10 +2,11 @@
 """
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping, Sequence, Generator, Any, Optional, List
+from typing import NamedTuple, Mapping, Sequence, Generator, Optional
 
 import openapi_type as oas
 from inflection import underscore
+from pyrsistent.typing import PVector, PMap
 from pyrsistent import pmap, pvector
 
 
@@ -75,7 +76,7 @@ class EndpointMethod(NamedTuple):
                 name='accept_charset',
                 datatype='str',
                 default="'utf-8'"
-            )
+            ),
         ]
     )
 
@@ -155,28 +156,34 @@ def pythonize_path_segment(seg: str) -> EndpointSegment:
     )
 
 
+PARAM_CONTAINERS: PMap[oas.ParamLocation, PVector[oas.OperationParameter]] = pmap(
+    { oas.ParamLocation.QUERY:  pvector()  # type: ignore
+    , oas.ParamLocation.PATH:   pvector()
+    , oas.ParamLocation.HEADER: pvector()
+    , oas.ParamLocation.COOKIE: pvector()
+    }
+)
+
+
 def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
-    methods = (path.head,
-               path.get,
-               path.post,
-               path.put,
-               path.patch,
-               path.delete,
-               path.trace)
-    for name, method in path._asdict().items():
-        if not method or method not in methods:
-            continue
-        containers: Mapping[oas.ParamLocation, List[oas.OperationParameter]] = {
-            oas.ParamLocation.QUERY: [],
-            oas.ParamLocation.PATH: [],
-            oas.ParamLocation.HEADER: [],
-            oas.ParamLocation.COOKIE: []
-        }
+    methods = ( path.head
+              , path.get
+              , path.post
+              , path.put
+              , path.patch
+              , path.delete
+              , path.trace
+              )
+    supported_methods = ((nam, met) for nam, met in path._asdict().items() if met and met in methods)
+    for name, method in supported_methods:
+        containers = PARAM_CONTAINERS
         for param in method.parameters:
             try:
-                containers[param.in_].append(param)
+                container = containers[param.in_]
             except KeyError:
                 raise NotImplementedError(f'Param parsing is not supported for parameters in {param.in_}')
+            else:
+                containers = containers.set(param.in_, container.append(param))
 
         yield EndpointMethod(
             name=name,

@@ -4,7 +4,7 @@ from {{ package_name }}.common import http, types
 
 
 __all__ = (
-    'request',
+    'call',
     {% if path_params_type %}'PathParams',{% endif -%}
     {% if query_params_type %}'QueryParams',{% endif -%}
     {% if request_type %}'Request',{% endif -%}
@@ -33,5 +33,14 @@ parse_request, serialize_request = types.generate_constructor_and_serializer(Req
 parse_response, serialize_response = types.generate_constructor_and_serializer(Response)
 {% endif %}
 
-def request(client: http.Client{% if request_type %}, req: Request{% endif %}) -> {% if response_type %}Response{% else %}None{% endif %}:
+def call(
+    client: http.Client,
+    {% if request_type %}request: Request,{% endif %}
+    {% if headers_type %}headers: Headers = Headers(),{% endif %}
+) -> {% if response_type %}Response{% else %}None{% endif %}:
+    url = '/'.join([client.service_url.rstrip('/'), URL.lstrip('/')])
+    response = client.make_call(
+        method=METHOD, url=url,
+        {% if headers_type %}headers=headers._asdict(){% endif %}
+    )
     return None

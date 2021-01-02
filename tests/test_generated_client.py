@@ -7,5 +7,6 @@ import example_client
 ])
 def test_client(service_url):
     client = example_client.common.http.Client(service_url=service_url)
-    action = example_client.service.pet.post.request(client)
+    action = example_client.service.pet.post.call(client)
 
+    action = example_client.service.pet.find_by_tags.get.call(client)

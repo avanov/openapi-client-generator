@@ -3,10 +3,11 @@ from typing import Mapping, NamedTuple, TypeVar, Callable, Optional, Type
 from typing import Protocol
 
 import urllib3
+from inflection import dasherize
 from pyrsistent import pmap
 
 
-__all__ = ('Client', 'make_call', 'Method')
+__all__ = ('Client', 'Method')
 
 
 http = urllib3.PoolManager()
@@ -57,5 +58,7 @@ class Client(NamedTuple):
         url: str,
         headers: Headers = pmap()
     ) -> Mapping:
-        url = '/'.join([self.service_url.rstrip('/'), url.lstrip('/')])
-        return http.request(method.value.upper(), url, headers=headers)
+        return http.request(
+            method.value.upper(), url,
+            headers={dasherize(k): v for k, v in headers.items()}
+        )
