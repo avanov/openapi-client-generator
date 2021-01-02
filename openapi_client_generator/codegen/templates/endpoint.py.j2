@@ -1,10 +1,15 @@
 from typing import NamedTuple, Callable
-from typeit import TypeConstructor
 
-from {{ package_name }}.common import *
+from {{ package_name }}.common import http, types
 
 
-__all__ = ('Params', 'Request', 'Response', 'request')
+__all__ = (
+    'request',
+    {% if path_params_type %}'PathParams',{% endif -%}
+    {% if query_params_type %}'QueryParams',{% endif -%}
+    {% if request_type %}'Request',{% endif -%}
+    {% if response_type %}'Response',{% endif -%}
+)
 
 
 {{ path_params_type }}
@@ -20,10 +25,13 @@ __all__ = ('Params', 'Request', 'Response', 'request')
 METHOD = http.Method(__name__.split('.')[-1])
 URL = "{{ endpoint_url }}"
 
+{% if request_type %}
+parse_request, serialize_request = types.generate_constructor_and_serializer(Request)
+{% endif %}
 
-parse_request, serialize_request = TypeConstructor ^ Request
-parse_response, serialize_response = TypeConstructor ^ Response
+{% if response_type %}
+parse_response, serialize_response = types.generate_constructor_and_serializer(Response)
+{% endif %}
 
-
-def request(r: Request) -> None:
+def request(client: http.Client{% if request_type %}, req: Request{% endif %}) -> {% if response_type %}Response{% else %}None{% endif %}:
     return None

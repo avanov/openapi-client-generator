@@ -7,10 +7,5 @@ import example_client
 ])
 def test_client(service_url):
     client = example_client.common.http.Client(service_url=service_url)
-    action = example_client.service.pet.post
-    rv = client.call(
-        action,
-        request=action.Request(),
-        params=action.PathParams(),
-        headers=action.Headers(),
-    )
+    action = example_client.service.pet.post.request(client)
+
