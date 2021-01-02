@@ -49,36 +49,45 @@ class TypeAttr(NamedTuple):
     name: str
     datatype: str
     default: Optional[str]
+    docstring: str = ''
 
 
 class TypeContext(NamedTuple):
     name: str
     docstring: str = ''
-    attrs: Sequence[TypeAttr] = pvector()
+    attrs: PVector[TypeAttr] = pvector()
+
+
+DEFAULT_QUERY_PARAMS_TYPE = TypeContext(name='Query', docstring='Parameters for the endpoint query string')
+DEFAULT_PATH_PARAMS_TYPE  = TypeContext(name='Params', docstring='Parameters for the endpoint path placeholders')
+DEFAULT_REQUEST_TYPE      = TypeContext(name='Request')
+DEFAULT_RESPONSE_TYPE     = TypeContext(name='Response')
+DEFAULT_HEADERS_TYPE      = TypeContext(
+    name='Headers',
+    attrs=pvector([
+        TypeAttr(
+            name='accept',
+            datatype='str',
+            default="'application/json'",
+        ),
+        TypeAttr(
+            name='accept_charset',
+            datatype='str',
+            default="'utf-8'"
+        ),
+    ])
+)
 
 
 class EndpointMethod(NamedTuple):
-    name: str
-    method: oas.Operation
-    params: Params
-    path_params_type: TypeContext = TypeContext(name='PathParams', attrs=[])
-    query_params_type: TypeContext = TypeContext(name='QueryParams', attrs=[])
-    request_type: TypeContext = TypeContext(name='Request', attrs=[])
-    response_type: TypeContext = TypeContext(name='Response', attrs=[])
-    headers_type: TypeContext = TypeContext(
-        name='Headers', attrs=[
-            TypeAttr(
-                name='accept',
-                datatype='str',
-                default="'application/json'",
-            ),
-            TypeAttr(
-                name='accept_charset',
-                datatype='str',
-                default="'utf-8'"
-            ),
-        ]
-    )
+    name:              str
+    method:            oas.Operation
+    params:            Params
+    path_params_type:  TypeContext = DEFAULT_PATH_PARAMS_TYPE
+    query_params_type: TypeContext = DEFAULT_QUERY_PARAMS_TYPE
+    request_type:      TypeContext = DEFAULT_REQUEST_TYPE
+    response_type:     TypeContext = DEFAULT_RESPONSE_TYPE
+    headers_type:      TypeContext = DEFAULT_HEADERS_TYPE
 
 
 SupportedMethods = Generator[EndpointMethod, None, None]
@@ -185,13 +194,87 @@ def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
             else:
                 containers = containers.set(param.in_, container.append(param))
 
+        params = Params(
+            query_params=containers[oas.ParamLocation.QUERY],
+            path_params=containers[oas.ParamLocation.PATH],
+            header_params=containers[oas.ParamLocation.HEADER],
+            cookie_params=containers[oas.ParamLocation.COOKIE],
+        )
+
         yield EndpointMethod(
             name=name,
             method=method,
-            params=Params(
-                query_params=containers[oas.ParamLocation.QUERY],
-                path_params=containers[oas.ParamLocation.PATH],
-                header_params=containers[oas.ParamLocation.HEADER],
-                cookie_params=containers[oas.ParamLocation.COOKIE],
+            params=params,
+            path_params_type=infer_path_params_type(params.path_params),
+            query_params_type=infer_path_params_type(params.query_params, default=DEFAULT_QUERY_PARAMS_TYPE),
+            request_type=infer_request_type(),
+            response_type=infer_response_type(),
+            headers_type=infer_headers_type(),
+        )
+
+
+def infer_path_params_type(params: Sequence[oas.OperationParameter],
+                           default: TypeContext = DEFAULT_PATH_PARAMS_TYPE) -> TypeContext:
+    if not params:
+        return default
+
+    rv = default
+    for param in params:
+        schema = param.schema
+        if param.required:
+            datatype = '{T}'
+            default_value: Optional[str] = None
+        else:
+            datatype = 'Optional[{T}]'
+            default_value = 'None'
+
+        T = python_type_from_openapi_schema(param.schema)
+
+        rv = rv._replace(
+            attrs=rv.attrs.append(
+                TypeAttr(
+                    name=param.name,
+                    datatype=datatype.format(T=T.name),
+                    default=default_value,
+                    docstring=T.docstring,
+                )
             )
         )
+    return rv
+
+
+def infer_query_params_type(params: Sequence[oas.OperationParameter],
+                            default: TypeContext = DEFAULT_QUERY_PARAMS_TYPE) -> TypeContext:
+    return default
+
+
+def infer_request_type(default: TypeContext = DEFAULT_REQUEST_TYPE) -> TypeContext:
+    return default
+
+
+def infer_response_type(default: TypeContext = DEFAULT_RESPONSE_TYPE) -> TypeContext:
+    return default
+
+
+def infer_headers_type(default: TypeContext = DEFAULT_HEADERS_TYPE) -> TypeContext:
+    return default
+
+
+class TypeDescr(NamedTuple):
+    name: str
+    default_value: Optional[str] = None
+    docstring: str = ''
+
+
+def python_type_from_openapi_schema(schema: oas.SchemaValue) -> TypeDescr:
+    if isinstance(schema, oas.StringValue):
+        if schema.enum:
+            docstring = ', '.join(schema.enum)
+        else:
+            docstring = schema.description
+        return TypeDescr('str', docstring=docstring)
+    elif isinstance(schema, oas.IntegerValue):
+        return TypeDescr('int')
+    elif isinstance(schema, oas.BooleanValue):
+        return TypeDescr('bool')
+    return TypeDescr('str')

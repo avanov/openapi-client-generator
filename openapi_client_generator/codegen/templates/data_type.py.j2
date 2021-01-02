@@ -4,5 +4,9 @@ class {{ name }}(NamedTuple):
     """
     {% for attr in attrs -%}
     {{ attr.name }}: {{ attr.datatype }}{% if attr.default %} = {{ attr.default }}{% endif %}
+    {% if attr.docstring -%}
+    """ {{ attr.docstring }}
+    """
+    {% endif %}
     {% endfor %}
 {% endif %}
