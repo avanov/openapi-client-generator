@@ -7,23 +7,32 @@ from example_client.common import *
 __all__ = ('Params', 'Request', 'Response', 'request')
 
 
-class Params(NamedTuple):
-    """ Query parameters
+class PathParams(NamedTuple):
+    """ 
     """
+    
 
+class QueryParams(NamedTuple):
+    """ 
+    """
+    
 
 class Request(NamedTuple):
-    pass
-
+    """ 
+    """
+    
 
 class Response(NamedTuple):
-    pass
-
+    """ 
+    """
+    
 
 class Headers(NamedTuple):
+    """ 
+    """
     accept: str = 'application/json'
     accept_charset: str = 'utf-8'
-
+    
 
 METHOD = http.Method(__name__.split('.')[-1])
 URL = "user/login"

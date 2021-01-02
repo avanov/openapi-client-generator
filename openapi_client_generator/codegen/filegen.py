@@ -27,7 +27,8 @@ class EmptyContext(NamedTuple):
 class EndpointContext(NamedTuple):
     package_name: str
     endpoint_url: str
-    params_type: str
+    path_params_type: str
+    query_params_type: str
     request_type: str
     response_type: str
     headers_type: str
@@ -119,10 +120,11 @@ def endpoints_bindings(meta: SpecMeta, package_name: str, endpoints_root: Path) 
             ctx = EndpointContext(
                 package_name=package_name,
                 endpoint_url=pth.as_endpoint_url(),
-                params_type=templates.PARAMS_TYPE.render(method.params_type),
-                request_type=templates.REQUEST_TYPE.render(method.request_type),
-                response_type=templates.RESPONSE_TYPE.render(method.response_type),
-                headers_type=templates.HEADERS_TYPE.render(method.headers_type),
+                path_params_type=templates.DATA_TYPE.render(method.path_params_type._asdict()),
+                query_params_type=templates.DATA_TYPE.render(method.query_params_type._asdict()),
+                request_type=templates.DATA_TYPE.render(method.request_type._asdict()),
+                response_type=templates.DATA_TYPE.render(method.response_type._asdict()),
+                headers_type=templates.DATA_TYPE.render(method.headers_type._asdict()),
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
             # make sure there's `__init__.py` in every sub-package

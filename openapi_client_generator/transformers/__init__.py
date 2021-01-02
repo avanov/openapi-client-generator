@@ -2,7 +2,7 @@
 """
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping, Sequence, Generator, Any, Optional
+from typing import NamedTuple, Mapping, Sequence, Generator, Any, Optional, List
 
 import openapi_type as oas
 from inflection import underscore
@@ -37,13 +37,47 @@ class EndpointSegments(NamedTuple):
         return '/'.join(x.placeholder if x.placeholder else x.original for x in self.segments)
 
 
+class Params(NamedTuple):
+    query_params: Sequence[oas.OperationParameter]
+    path_params: Sequence[oas.OperationParameter]
+    header_params: Sequence[oas.OperationParameter]
+    cookie_params: Sequence[oas.OperationParameter]
+
+
+class TypeAttr(NamedTuple):
+    name: str
+    datatype: str
+    default: Optional[str]
+
+
+class TypeContext(NamedTuple):
+    name: str
+    docstring: str = ''
+    attrs: Sequence[TypeAttr] = pvector()
+
+
 class EndpointMethod(NamedTuple):
     name: str
     method: oas.Operation
-    params_type: Mapping[str, Any] = pmap()
-    request_type: Mapping[str, Any] = pmap()
-    response_type: Mapping[str, Any] = pmap()
-    headers_type: Mapping[str, Any] = pmap()
+    params: Params
+    path_params_type: TypeContext = TypeContext(name='PathParams', attrs=[])
+    query_params_type: TypeContext = TypeContext(name='QueryParams', attrs=[])
+    request_type: TypeContext = TypeContext(name='Request', attrs=[])
+    response_type: TypeContext = TypeContext(name='Response', attrs=[])
+    headers_type: TypeContext = TypeContext(
+        name='Headers', attrs=[
+            TypeAttr(
+                name='accept',
+                datatype='str',
+                default="'application/json'",
+            ),
+            TypeAttr(
+                name='accept_charset',
+                datatype='str',
+                default="'utf-8'"
+            )
+        ]
+    )
 
 
 SupportedMethods = Generator[EndpointMethod, None, None]
@@ -132,7 +166,25 @@ def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
     for name, method in path._asdict().items():
         if not method or method not in methods:
             continue
+        containers: Mapping[oas.ParamLocation, List[oas.OperationParameter]] = {
+            oas.ParamLocation.QUERY: [],
+            oas.ParamLocation.PATH: [],
+            oas.ParamLocation.HEADER: [],
+            oas.ParamLocation.COOKIE: []
+        }
+        for param in method.parameters:
+            try:
+                containers[param.in_].append(param)
+            except KeyError:
+                raise NotImplementedError(f'Param parsing is not supported for parameters in {param.in_}')
+
         yield EndpointMethod(
             name=name,
             method=method,
+            params=Params(
+                query_params=containers[oas.ParamLocation.QUERY],
+                path_params=containers[oas.ParamLocation.PATH],
+                header_params=containers[oas.ParamLocation.HEADER],
+                cookie_params=containers[oas.ParamLocation.COOKIE],
+            )
         )

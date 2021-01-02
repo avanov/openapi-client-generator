@@ -7,17 +7,15 @@ from {{ package_name }}.common import *
 __all__ = ('Params', 'Request', 'Response', 'request')
 
 
-{{ params_type }}
+{{ path_params_type }}
 
+{{ query_params_type }}
 
 {{ request_type }}
 
-
 {{ response_type }}
 
-
 {{ headers_type }}
-
 
 METHOD = http.Method(__name__.split('.')[-1])
 URL = "{{ endpoint_url }}"

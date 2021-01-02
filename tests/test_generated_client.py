@@ -11,6 +11,6 @@ def test_client(service_url):
     rv = client.call(
         action,
         request=action.Request(),
-        params=action.Params(),
+        params=action.PathParams(),
         headers=action.Headers(),
     )
