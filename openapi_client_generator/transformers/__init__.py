@@ -1,11 +1,12 @@
 """ A collection of functions that transform OpenAPI spec to data structures convenient for codegen.
 """
+from enum import Enum
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping, Sequence, Generator, Optional
+from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Any, Union
 
 import openapi_type as oas
-from inflection import underscore
+from inflection import underscore, camelize
 from pyrsistent.typing import PVector, PMap
 from pyrsistent import pmap, pvector
 
@@ -48,7 +49,19 @@ class Params(NamedTuple):
 class TypeAttr(NamedTuple):
     name: str
     datatype: str
+    is_required: bool
     default: Optional[str]
+    docstring: str = ''
+
+    def datatype_repr(self) -> str:
+        if self.is_required:
+            return f'Optional[{self.datatype}]'
+        return self.datatype
+
+
+class TypeDescr(NamedTuple):
+    name: str
+    default_value: Optional[str] = None
     docstring: str = ''
 
 
@@ -69,11 +82,13 @@ DEFAULT_HEADERS_TYPE      = TypeContext(
             name='accept',
             datatype='str',
             default="'application/json'",
+            is_required=True
         ),
         TypeAttr(
             name='accept_charset',
             datatype='str',
-            default="'utf-8'"
+            default="'utf-8'",
+            is_required=True
         ),
     ])
 )
@@ -100,6 +115,9 @@ class Endpoint(NamedTuple):
     supported_methods: SupportedMethods
 
 
+ResolvedTypes = Mapping[str, TypeContext]
+
+
 class SpecMeta(NamedTuple):
     """ A post-processed OpenAPI specification that is convenient to use for codegen
     """
@@ -107,6 +125,7 @@ class SpecMeta(NamedTuple):
     """ original spec
     """
     paths: Mapping[EndpointSegments, Endpoint]
+    common_types: ResolvedTypes
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
@@ -119,10 +138,101 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
         )
         paths[pth] = endpoint
 
+    common_types = resolve_schemas(spec.components.schemas)
+
     return SpecMeta(
         spec=spec,
-        paths=paths
+        paths=paths,
+        common_types=common_types
     )
+
+
+def resolve_schemas(schemas: Mapping[str, oas.SchemaType]) -> ResolvedTypes:
+    resolved_types = pvector()
+    for type_name, schema in schemas.items():
+        resolved_types = resolved_types.extend(recursive_resolve_schema(schemas, type_name, schema))
+    return {x.name: x for x in resolved_types}
+
+
+def recursive_resolve_schema(
+    registry: Mapping[str, oas.SchemaType],
+    type_name: str,
+    schema: oas.SchemaType
+) -> PVector[TypeContext]:
+    final_types = pvector()
+    if isinstance(schema, oas.StringValue):
+        raise NotImplementedError('String Schema')
+    elif isinstance(schema, oas.ObjectSchema):
+        attrs = pvector()
+        for attr_name, attr_meta in schema.properties.items():
+            to_resolve: Union[None, oas.SchemaValue, oas.RecursiveAttrs] = None
+            default = None
+            if isinstance(attr_meta, oas.StringValue):
+                if attr_meta.enum:
+                    raise NotImplementedError('String Enum')
+                attr_datatype = 'str'
+                default = f"'{attr_meta.default}'" if attr_meta.default is not None else None
+
+            elif isinstance(attr_meta, oas.IntegerValue):
+                attr_datatype = 'int'
+                default = f'{attr_meta.default}' if attr_meta.default is not None else None
+
+            elif isinstance(attr_meta, oas.FloatValue):
+                attr_datatype = 'float'
+                default = f'{attr_meta.default}' if attr_meta.default is not None else None
+
+            elif isinstance(attr_meta, oas.BooleanValue):
+                attr_datatype = 'bool'
+                default = f'{attr_meta.default}' if attr_meta.default is not None else None
+
+            elif isinstance(attr_meta, oas.Reference):
+                if attr_meta.ref.location is oas.custom_types.RefTo.SCHEMAS:
+                    attr_meta_ = registry[attr_meta.ref.name]
+                    attr_datatype = camelize(f'{type_name}_{attr_name}')
+                    resolved_types = recursive_resolve_schema(
+                        registry,
+                        attr_datatype,
+                        attr_meta_
+                    )
+                    final_types = final_types.extend(resolved_types)
+                else:
+                    raise NotImplementedError('Reference Value')
+
+            elif isinstance(attr_meta, oas.ArrayValue):
+                attr_datatype = 'Sequence[{T}]'
+                to_resolve = attr_meta.items
+
+            elif isinstance(attr_meta, oas.ObjectValue):
+                attr_datatype = '{T}'
+                to_resolve = attr_meta.properties
+
+            elif isinstance(attr_meta, oas.ObjectWithAdditionalProperties):
+                raise NotImplementedError(' Additional properties')
+            else:
+                raise TypeError(f'Unrecognised schema type: {attr_meta}')
+
+            if to_resolve:
+                T = 'Any'
+                attr_datatype = attr_datatype.format(T=T)
+
+            attrs = attrs.append(TypeAttr(
+                name=attr_name,
+                datatype=attr_datatype,
+                default=default,
+                is_required=attr_name in schema.required
+            ))
+        final_types = final_types.append(
+            TypeContext(
+                name=type_name,
+                docstring='',
+                attrs=attrs
+            )
+        )
+
+    elif isinstance(schema, oas.ArraySchema):
+        schema
+
+    return final_types
 
 
 def api_path_to_filepath(api_path: str, sep: str = '/') -> EndpointSegments:
@@ -205,47 +315,40 @@ def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
             name=name,
             method=method,
             params=params,
-            path_params_type=infer_path_params_type(params.path_params),
-            query_params_type=infer_path_params_type(params.query_params, default=DEFAULT_QUERY_PARAMS_TYPE),
+            path_params_type=infer_params_type(params.path_params),
+            query_params_type=infer_params_type(params.query_params, default=DEFAULT_QUERY_PARAMS_TYPE),
             request_type=infer_request_type(),
             response_type=infer_response_type(),
             headers_type=infer_headers_type(),
         )
 
 
-def infer_path_params_type(params: Sequence[oas.OperationParameter],
-                           default: TypeContext = DEFAULT_PATH_PARAMS_TYPE) -> TypeContext:
+def infer_params_type(params: Sequence[oas.OperationParameter],
+                      default: TypeContext = DEFAULT_PATH_PARAMS_TYPE) -> TypeContext:
     if not params:
         return default
 
     rv = default
     for param in params:
-        schema = param.schema
         if param.required:
-            datatype = '{T}'
             default_value: Optional[str] = None
         else:
-            datatype = 'Optional[{T}]'
             default_value = 'None'
 
-        T = python_type_from_openapi_schema(param.schema)
+        datatype = python_type_from_openapi_schema(param.schema)
 
         rv = rv._replace(
             attrs=rv.attrs.append(
                 TypeAttr(
                     name=param.name,
-                    datatype=datatype.format(T=T.name),
+                    datatype=datatype.name,
+                    docstring=datatype.docstring,
+                    is_required=param.required,
                     default=default_value,
-                    docstring=T.docstring,
                 )
             )
         )
     return rv
-
-
-def infer_query_params_type(params: Sequence[oas.OperationParameter],
-                            default: TypeContext = DEFAULT_QUERY_PARAMS_TYPE) -> TypeContext:
-    return default
 
 
 def infer_request_type(default: TypeContext = DEFAULT_REQUEST_TYPE) -> TypeContext:
@@ -258,12 +361,6 @@ def infer_response_type(default: TypeContext = DEFAULT_RESPONSE_TYPE) -> TypeCon
 
 def infer_headers_type(default: TypeContext = DEFAULT_HEADERS_TYPE) -> TypeContext:
     return default
-
-
-class TypeDescr(NamedTuple):
-    name: str
-    default_value: Optional[str] = None
-    docstring: str = ''
 
 
 def python_type_from_openapi_schema(schema: oas.SchemaValue) -> TypeDescr:

@@ -3,7 +3,7 @@ class {{ name }}(NamedTuple):
     """ {{ docstring }}
     """
     {% for attr in attrs -%}
-    {{ attr.name }}: {{ attr.datatype }}{% if attr.default %} = {{ attr.default }}{% endif %}
+    {{ attr.name }}: {{ attr.datatype_repr }}{% if attr.default %} = {{ attr.default }}{% endif %}
     {% if attr.docstring -%}
     """ {{ attr.docstring }}
     """
