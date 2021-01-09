@@ -148,7 +148,7 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
 
 
 def resolve_schemas(schemas: Mapping[str, oas.SchemaType]) -> ResolvedTypes:
-    resolved_types = pvector()
+    resolved_types: PVector[TypeContext] = pvector()
     for type_name, schema in schemas.items():
         resolved_types = resolved_types.extend(recursive_resolve_schema(schemas, type_name, schema))
     return {x.name: x for x in resolved_types}
@@ -159,13 +159,13 @@ def recursive_resolve_schema(
     type_name: str,
     schema: oas.SchemaType
 ) -> PVector[TypeContext]:
-    final_types = pvector()
+    final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
         raise NotImplementedError('String Schema')
-    elif isinstance(schema, oas.ObjectSchema):
-        attrs = pvector()
+    elif isinstance(schema, oas.ObjectValue):
+        attrs: PVector[TypeAttr] = pvector()
         for attr_name, attr_meta in schema.properties.items():
-            to_resolve: Union[None, oas.SchemaValue, oas.RecursiveAttrs] = None
+            to_resolve: Union[None, oas.SchemaType, oas.RecursiveAttrs] = None
             default = None
             if isinstance(attr_meta, oas.StringValue):
                 if attr_meta.enum:
@@ -201,6 +201,12 @@ def recursive_resolve_schema(
             elif isinstance(attr_meta, oas.ArrayValue):
                 attr_datatype = 'Sequence[{T}]'
                 to_resolve = attr_meta.items
+                resolved_types = recursive_resolve_schema(
+                    registry,
+                    camelize(f'{type_name}_{attr_name}'),
+                    attr_meta.items
+                )
+                final_types = final_types.extend(resolved_types)
 
             elif isinstance(attr_meta, oas.ObjectValue):
                 attr_datatype = '{T}'
@@ -208,6 +214,7 @@ def recursive_resolve_schema(
 
             elif isinstance(attr_meta, oas.ObjectWithAdditionalProperties):
                 raise NotImplementedError(' Additional properties')
+
             else:
                 raise TypeError(f'Unrecognised schema type: {attr_meta}')
 
@@ -229,8 +236,27 @@ def recursive_resolve_schema(
             )
         )
 
-    elif isinstance(schema, oas.ArraySchema):
+    elif isinstance(schema, oas.ArrayValue):
+        schema_ = schema.items
+        resolved_types = recursive_resolve_schema(
+            registry,
+            type_name,
+            schema_
+        )
+        final_types = final_types.extend(resolved_types)
         schema
+
+    elif isinstance(schema, oas.Reference):
+        if schema.ref.location is oas.custom_types.RefTo.SCHEMAS:
+            to_resolve = registry[schema.ref.name]
+            resolved_types = recursive_resolve_schema(
+                registry,
+                schema.ref.name,
+                to_resolve
+            )
+            final_types = final_types.extend(resolved_types)
+        else:
+            raise NotImplementedError('Reference Value 2')
 
     return final_types
 
@@ -363,7 +389,7 @@ def infer_headers_type(default: TypeContext = DEFAULT_HEADERS_TYPE) -> TypeConte
     return default
 
 
-def python_type_from_openapi_schema(schema: oas.SchemaValue) -> TypeDescr:
+def python_type_from_openapi_schema(schema: oas.SchemaType) -> TypeDescr:
     if isinstance(schema, oas.StringValue):
         if schema.enum:
             docstring = ', '.join(schema.enum)
