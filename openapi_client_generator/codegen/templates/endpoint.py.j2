@@ -3,7 +3,8 @@ https://github.com/avanov/openapi-client-generator
 """
 from typing import NamedTuple, Callable, Optional
 
-from {{ package_name }}.common import http, types
+from {{ package_name }}.common import http
+from {{ package_name }}.common.types import *
 
 
 __all__ = (
@@ -25,15 +26,21 @@ __all__ = (
 
 {{ headers_type }}
 
+
 METHOD = http.Method(__name__.split('.')[-1])
 URL = "{{ endpoint_url }}"
 
+{% if query_params_type %}
+parse_query, dump_query = {{ query_style.value }}(Query)
+{% endif %}
+
+
 {% if request_type %}
-parse_request, serialize_request = types.generate_constructor_and_serializer(Request)
+parse_request, dump_request = {{ request_style.value }}(Request)
 {% endif %}
 
 {% if response_type %}
-parse_response, serialize_response = types.generate_constructor_and_serializer(Response)
+parse_response, serialize_response = {{ request_style.value }}(Response)
 {% endif %}
 
 def call(
@@ -43,9 +50,17 @@ def call(
     {% if query_params_type %}query: Query,{% endif %}
     {% if headers_type %}headers: Headers = Headers(),{% endif %}
 ) -> {% if response_type %}Response{% else %}None{% endif %}:
-    url = '/'.join([client.service_url.rstrip('/'), URL.lstrip('/')])
-    response = client.make_call(
-        method=METHOD, url=url,
-        {% if headers_type %}headers=headers._asdict(){% endif %}
+    {% if path_params_type %}
+    url = URL.format(**params._asdict())
+    {% else %}
+    url = URL
+    {% endif %}
+
+    resp = client.make_call(
+        method=METHOD,
+        url=url,
+        {% if headers_type %}headers=headers._asdict(),{% endif %}
+        {% if query_params_type %}query=dump_query(query),{% endif %}
+        {% if request_type %}payload=dump_request(request),{% endif %}
     )
-    return None
+    return parse_response(resp.json())

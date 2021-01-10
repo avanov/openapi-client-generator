@@ -3,46 +3,48 @@ https://github.com/avanov/openapi-client-generator
 """
 from typing import NamedTuple, Callable, Optional
 
-from example_client.common import http, types
+from example_client.common import http
+from example_client.common.types import *
 
 
 __all__ = (
-    'call',
-    )
+    "call",
+    "Request",
+)
 
 
-
-
-
-
-
-
+Request = Order
 
 
 class Headers(NamedTuple):
-    """ 
-    """
-    accept: str = 'application/json'
-    
-    accept_charset: str = 'utf-8'
+    """"""
 
-METHOD = http.Method(__name__.split('.')[-1])
+    accept: str = "application/json"
+
+    accept_charset: str = "utf-8"
+
+    authorization: Optional[str] = None
+
+
+METHOD = http.Method(__name__.split(".")[-1])
 URL = "store/order"
 
 
-
+parse_request, serialize_request = generate_constructor_and_serializer(Request)
 
 
 def call(
     client: http.Client,
-    
-    
-    
+    request: Request,
     headers: Headers = Headers(),
 ) -> None:
-    url = '/'.join([client.service_url.rstrip('/'), URL.lstrip('/')])
+
+    url = URL
+
     response = client.make_call(
-        method=METHOD, url=url,
-        headers=headers._asdict()
+        method=METHOD,
+        url=url,
+        headers=headers._asdict(),
+        payload=request._asdict(),
     )
     return None

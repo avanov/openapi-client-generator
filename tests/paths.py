@@ -12,4 +12,6 @@ SPECS = [
         'link-example',
         'uspto',
     ]
+] + [
+    (x, TESTS_ROOT / f'{x}.json') for x in ['example-client-spec']
 ]

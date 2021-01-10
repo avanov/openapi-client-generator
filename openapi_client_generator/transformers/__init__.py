@@ -1,14 +1,16 @@
 """ A collection of functions that transform OpenAPI spec to data structures convenient for codegen.
 """
-from enum import Enum
+import re
 from pathlib import Path
 from string import digits
-from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Any, Union
+from functools import reduce
+from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Union, Callable
 
 import openapi_type as oas
 from inflection import underscore, camelize
 from pyrsistent.typing import PVector, PMap
 from pyrsistent import pmap, pvector
+import deepmerge
 
 
 class EndpointSegment(NamedTuple):
@@ -53,10 +55,20 @@ class TypeAttr(NamedTuple):
     default: Optional[str]
     docstring: str = ''
 
+    @property
     def datatype_repr(self) -> str:
-        if self.is_required:
+        if not self.is_required:
             return f'Optional[{self.datatype}]'
         return self.datatype
+
+    @property
+    def default_repr(self) -> Optional[str]:
+        if self.default:
+            return self.default
+        if not self.is_required:
+            # optional values always have None as the default value
+            return 'None'
+        return None
 
 
 class TypeDescr(NamedTuple):
@@ -69,6 +81,14 @@ class TypeContext(NamedTuple):
     name: str
     docstring: str = ''
     attrs: PVector[TypeAttr] = pvector()
+    is_enum: bool = False
+    common_reference_as: Optional[str] = None
+    """ if a type is a reference to a common (shared) type, it will be imported from a common domain
+    and referenced as this name
+    """
+    @property
+    def ordered_attrs(self) -> Sequence[TypeAttr]:
+        return sorted(self.attrs, key=lambda x: x.is_required, reverse=True)
 
 
 DEFAULT_QUERY_PARAMS_TYPE = TypeContext(name='Query', docstring='Parameters for the endpoint query string')
@@ -90,6 +110,12 @@ DEFAULT_HEADERS_TYPE      = TypeContext(
             default="'utf-8'",
             is_required=True
         ),
+        TypeAttr(
+            name='authorization',
+            datatype='str',
+            default="None",
+            is_required=False
+        ),
     ])
 )
 
@@ -100,8 +126,8 @@ class EndpointMethod(NamedTuple):
     params:            Params
     path_params_type:  TypeContext = DEFAULT_PATH_PARAMS_TYPE
     query_params_type: TypeContext = DEFAULT_QUERY_PARAMS_TYPE
-    request_type:      TypeContext = DEFAULT_REQUEST_TYPE
-    response_type:     TypeContext = DEFAULT_RESPONSE_TYPE
+    request_types:     Sequence[TypeContext] = pvector([DEFAULT_REQUEST_TYPE])
+    response_types:    Sequence[TypeContext] = pvector([DEFAULT_RESPONSE_TYPE])
     headers_type:      TypeContext = DEFAULT_HEADERS_TYPE
 
 
@@ -130,15 +156,15 @@ class SpecMeta(NamedTuple):
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
+    common_types = resolve_schemas(spec.components.schemas)
+
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
         endpoint = Endpoint(
             path_item=item,
-            supported_methods=iter_supported_methods(item)
+            supported_methods=iter_supported_methods(common_types, item)
         )
         paths[pth] = endpoint
-
-    common_types = resolve_schemas(spec.components.schemas)
 
     return SpecMeta(
         spec=spec,
@@ -150,18 +176,40 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
 def resolve_schemas(schemas: Mapping[str, oas.SchemaType]) -> ResolvedTypes:
     resolved_types: PVector[TypeContext] = pvector()
     for type_name, schema in schemas.items():
-        resolved_types = resolved_types.extend(recursive_resolve_schema(schemas, type_name, schema))
+        resolved_types = resolved_types.extend(
+            recursive_resolve_schema(schemas, type_name, schema, attr_name_normalizer=underscore)
+        )
     return {x.name: x for x in resolved_types}
+
+
+PYTHONIC = re.compile('/')
 
 
 def recursive_resolve_schema(
     registry: Mapping[str, oas.SchemaType],
     type_name: str,
-    schema: oas.SchemaType
+    schema: oas.SchemaType,
+    attr_name_normalizer: Callable[[str], str] = lambda x: x
 ) -> PVector[TypeContext]:
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
-        raise NotImplementedError('String Schema')
+        final_types = final_types.append(
+            TypeContext(
+                name='str',
+                docstring='',
+                attrs=pvector(),
+                common_reference_as=type_name
+            )
+        )
+    elif isinstance(schema, oas.IntegerValue):
+        final_types = final_types.append(
+            TypeContext(
+                name='int',
+                docstring='',
+                attrs=pvector(),
+                common_reference_as=type_name
+            )
+        )
     elif isinstance(schema, oas.ObjectValue):
         attrs: PVector[TypeAttr] = pvector()
         for attr_name, attr_meta in schema.properties.items():
@@ -169,8 +217,22 @@ def recursive_resolve_schema(
             default = None
             if isinstance(attr_meta, oas.StringValue):
                 if attr_meta.enum:
-                    raise NotImplementedError('String Enum')
-                attr_datatype = 'str'
+                    attr_datatype = camelize(f'{type_name}_{attr_name}')
+                    final_types = final_types.append(
+                        TypeContext(
+                            name=attr_datatype,
+                            docstring='',
+                            attrs=pvector(TypeAttr(
+                                name=underscore(PYTHONIC.sub('_', x)).upper(),
+                                datatype='str',
+                                default=f"'{x}'",
+                                is_required=True
+                            ) for x in attr_meta.enum),
+                            is_enum=True
+                        )
+                    )
+                else:
+                    attr_datatype = 'str'
                 default = f"'{attr_meta.default}'" if attr_meta.default is not None else None
 
             elif isinstance(attr_meta, oas.IntegerValue):
@@ -192,7 +254,8 @@ def recursive_resolve_schema(
                     resolved_types = recursive_resolve_schema(
                         registry,
                         attr_datatype,
-                        attr_meta_
+                        attr_meta_,
+                        attr_name_normalizer
                     )
                     final_types = final_types.extend(resolved_types)
                 else:
@@ -201,29 +264,65 @@ def recursive_resolve_schema(
             elif isinstance(attr_meta, oas.ArrayValue):
                 attr_datatype = 'Sequence[{T}]'
                 to_resolve = attr_meta.items
+
+            elif isinstance(attr_meta, oas.ObjectValue):
+                attr_datatype = camelize(f'{type_name}_{attr_name}')
                 resolved_types = recursive_resolve_schema(
                     registry,
-                    camelize(f'{type_name}_{attr_name}'),
-                    attr_meta.items
+                    attr_datatype,
+                    attr_meta,
+                    attr_name_normalizer,
                 )
                 final_types = final_types.extend(resolved_types)
 
-            elif isinstance(attr_meta, oas.ObjectValue):
-                attr_datatype = '{T}'
-                to_resolve = attr_meta.properties
-
             elif isinstance(attr_meta, oas.ObjectWithAdditionalProperties):
                 raise NotImplementedError(' Additional properties')
+
+            elif isinstance(attr_meta, oas.ProductSchemaType):
+                to_merge = (x._asdict() for x in attr_meta.all_of)
+                attr_meta_ = oas.ObjectValue(**reduce(merge_strategy.merge, to_merge, {}))
+                attr_datatype = camelize(f'{type_name}_{attr_name}')
+                resolved_types = recursive_resolve_schema(
+                    registry,
+                    attr_datatype,
+                    attr_meta_,
+                    attr_name_normalizer,
+                )
+                final_types = final_types.extend(resolved_types)
+                if attr_name in attr_meta_.required:
+                    default = None
+                else:
+                    default = 'None'
+
+            elif isinstance(attr_meta, (oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne)):
+                attr_datatype = camelize(f'{type_name}_{attr_name}')
+                resolved_types = recursive_resolve_schema(
+                    registry,
+                    attr_datatype,
+                    attr_meta,
+                    attr_name_normalizer,
+                )
+                final_types = final_types.extend(resolved_types)
+
+            elif isinstance(attr_meta, oas.EmptyValue):
+                attr_datatype = 'Any'
+                default = 'None'
 
             else:
                 raise TypeError(f'Unrecognised schema type: {attr_meta}')
 
             if to_resolve:
                 T = 'Any'
+                if isinstance(to_resolve, oas.StringValue):
+                    T = 'str'
+                elif isinstance(to_resolve, oas.FloatValue):
+                    T = 'float'
+                elif isinstance(to_resolve, oas.BooleanValue):
+                    T = 'bool'
                 attr_datatype = attr_datatype.format(T=T)
 
             attrs = attrs.append(TypeAttr(
-                name=attr_name,
+                name=attr_name_normalizer(attr_name),
                 datatype=attr_datatype,
                 default=default,
                 is_required=attr_name in schema.required
@@ -238,13 +337,19 @@ def recursive_resolve_schema(
 
     elif isinstance(schema, oas.ArrayValue):
         schema_ = schema.items
+        array_type = TypeContext(
+            name=type_name,
+            docstring=schema.description,
+        )
+
+        final_types = final_types.append(array_type)
         resolved_types = recursive_resolve_schema(
             registry,
             type_name,
-            schema_
+            schema_,
+            attr_name_normalizer,
         )
         final_types = final_types.extend(resolved_types)
-        schema
 
     elif isinstance(schema, oas.Reference):
         if schema.ref.location is oas.custom_types.RefTo.SCHEMAS:
@@ -252,11 +357,51 @@ def recursive_resolve_schema(
             resolved_types = recursive_resolve_schema(
                 registry,
                 schema.ref.name,
-                to_resolve
+                to_resolve,
+                attr_name_normalizer
             )
             final_types = final_types.extend(resolved_types)
         else:
             raise NotImplementedError('Reference Value 2')
+
+    elif isinstance(schema, oas.ProductSchemaType):
+        to_merge = (x._asdict() for x in schema.all_of)
+        attr_meta_ = oas.ObjectValue(**reduce(merge_strategy.merge, to_merge, {}))
+        resolved_types = recursive_resolve_schema(
+            registry,
+            type_name,
+            attr_meta_,
+            attr_name_normalizer,
+        )
+        final_types = final_types.extend(resolved_types)
+
+    elif isinstance(schema, (oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne)):
+        if isinstance(schema, oas.UnionSchemaTypeAny):
+            items = schema.any_of
+        else:
+            items = schema.one_of
+        options = []
+        for var_num, schema_ in enumerate(items, start=1):
+            variant_name = camelize(f'{type_name}_var{var_num}')
+            options.append(variant_name)
+            resolved_types = recursive_resolve_schema(
+                registry,
+                variant_name,
+                schema_,
+                attr_name_normalizer,
+            )
+            final_types = final_types.extend(resolved_types)
+
+        final_types.append(
+            TypeContext(
+                name=f'Union[{", ".join(options)}]',
+                attrs=pvector(),
+                common_reference_as=type_name
+            )
+        )
+
+    else:
+        raise NotImplementedError(f'Unsupported recursive type: {schema}')
 
     return final_types
 
@@ -310,7 +455,11 @@ PARAM_CONTAINERS: PMap[oas.ParamLocation, PVector[oas.OperationParameter]] = pma
 )
 
 
-def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
+def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> SupportedMethods:
+    """
+    :param spec: reference to the rest of the spec that may be useful for parsing
+    :param path: current path
+    """
     methods = ( path.head
               , path.get
               , path.post
@@ -320,7 +469,7 @@ def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
               , path.trace
               )
     supported_methods = ((nam, met) for nam, met in path._asdict().items() if met and met in methods)
-    for name, method in supported_methods:
+    for name, (method) in supported_methods:
         containers = PARAM_CONTAINERS
         for param in method.parameters:
             try:
@@ -337,19 +486,77 @@ def iter_supported_methods(path: oas.PathItem) -> SupportedMethods:
             cookie_params=containers[oas.ParamLocation.COOKIE],
         )
 
+        if method.request_body:
+            for content_type, meta in method.request_body.content.items():
+                if content_type.format in (oas.ContentTypeFormat.JSON,
+                                           oas.ContentTypeFormat.ANYTHING,
+                                           oas.ContentTypeFormat.FORM_URLENCODED):
+                    request_schema = meta.schema
+                    break
+            else:
+                request_schema = list(method.request_body.content.items())[-1][1].schema
+
+            if isinstance(request_schema, oas.Reference):
+                request_types = [common_types[request_schema.ref.name]._replace(common_reference_as='Request')]
+            else:
+                request_types = recursive_resolve_schema(
+                    {}, 'Request', request_schema,
+                    attr_name_normalizer=underscore
+                )
+        else:
+            request_types = [DEFAULT_REQUEST_TYPE]
+
+
+        if method.responses:
+            supported_status = '200'
+            try:
+                response = method.responses[supported_status]
+            except KeyError:
+                raise NotImplementedError(f'Response status code: {list(method.responses.keys())}')
+
+            for content_type, meta in response.content.items():
+                if content_type.format in (oas.ContentTypeFormat.JSON,
+                                           oas.ContentTypeFormat.ANYTHING,
+                                           oas.ContentTypeFormat.FORM_URLENCODED):
+                    response_schema = meta.schema
+                    break
+            else:
+                last_response = list(response.content.items())[-1][1]
+                response_schema = last_response.schema
+            if isinstance(response_schema, oas.Reference):
+                response_types = [common_types[response_schema.ref.name]._replace(common_reference_as='Response')]
+            else:
+                response_types = recursive_resolve_schema(
+                    {}, 'Response', response_schema,
+                    attr_name_normalizer=underscore
+                )
+        else:
+            response_types = [DEFAULT_RESPONSE_TYPE]
+
+        query_params_type = infer_params_type(
+            params.query_params,
+            name_normalizer=underscore,
+            default=DEFAULT_QUERY_PARAMS_TYPE
+        )
+        path_params_type  = infer_params_type(params.path_params)
+        header_type       = infer_params_type(params.header_params,
+                                              name_normalizer=lambda x: underscore(x.lower()),
+                                              default=DEFAULT_HEADERS_TYPE)
+
         yield EndpointMethod(
             name=name,
             method=method,
             params=params,
-            path_params_type=infer_params_type(params.path_params),
-            query_params_type=infer_params_type(params.query_params, default=DEFAULT_QUERY_PARAMS_TYPE),
-            request_type=infer_request_type(),
-            response_type=infer_response_type(),
-            headers_type=infer_headers_type(),
+            path_params_type=path_params_type,
+            query_params_type=query_params_type,
+            request_types=request_types,
+            response_types=response_types,
+            headers_type=header_type,
         )
 
 
 def infer_params_type(params: Sequence[oas.OperationParameter],
+                      name_normalizer: Callable[[str], str] = lambda x: x,
                       default: TypeContext = DEFAULT_PATH_PARAMS_TYPE) -> TypeContext:
     if not params:
         return default
@@ -363,10 +570,12 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
 
         datatype = python_type_from_openapi_schema(param.schema)
 
+        normalized_name = name_normalizer(param.name)
+
         rv = rv._replace(
             attrs=rv.attrs.append(
                 TypeAttr(
-                    name=param.name,
+                    name=normalized_name,
                     datatype=datatype.name,
                     docstring=datatype.docstring,
                     is_required=param.required,
@@ -385,8 +594,31 @@ def infer_response_type(default: TypeContext = DEFAULT_RESPONSE_TYPE) -> TypeCon
     return default
 
 
-def infer_headers_type(default: TypeContext = DEFAULT_HEADERS_TYPE) -> TypeContext:
-    return default
+def infer_headers_type(headers: Sequence[oas.OperationParameter], default: TypeContext = DEFAULT_HEADERS_TYPE) -> TypeContext:
+    if not headers:
+        return default
+
+    rv = default
+    for hdr in headers:
+        if hdr.required:
+            default_value: Optional[str] = None
+        else:
+            default_value = 'None'
+
+        datatype = python_type_from_openapi_schema(hdr.schema)
+
+        rv = rv._replace(
+            attrs=rv.attrs.append(
+                TypeAttr(
+                    name=hdr.name,
+                    datatype=datatype.name,
+                    docstring=datatype.docstring,
+                    is_required=hdr.required,
+                    default=default_value,
+                )
+            )
+        )
+    return rv
 
 
 def python_type_from_openapi_schema(schema: oas.SchemaType) -> TypeDescr:
@@ -401,3 +633,18 @@ def python_type_from_openapi_schema(schema: oas.SchemaType) -> TypeDescr:
     elif isinstance(schema, oas.BooleanValue):
         return TypeDescr('bool')
     return TypeDescr('str')
+
+
+def add_to_set(config, path, base: frozenset, nxt: frozenset) -> frozenset:
+    return base | nxt
+
+
+merge_strategy = deepmerge.Merger(
+    [
+        (list, "append"),
+        (dict, "merge"),
+        (frozenset, add_to_set),
+    ],
+    ["override"],
+    ["override"]
+)

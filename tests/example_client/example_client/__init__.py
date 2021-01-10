@@ -4,4 +4,4 @@ https://github.com/avanov/openapi-client-generator
 from . import common
 from . import service
 
-__all__ = ('common', 'service')
+__all__ = ("common", "service")

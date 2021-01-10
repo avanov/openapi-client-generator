@@ -8,6 +8,7 @@ from itertools import islice
 
 from openapi_type import parse_spec
 
+from ..common.types import AttrStyle
 from ..codegen import filegen
 
 
@@ -21,6 +22,16 @@ def setup(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
                                             "If not specified, then the data will be read from stdin.")
     sub.add_argument('-o', '--out-dir', required=True,
                      help="Output directory that will contain a newly generated Python client.")
+    sub.add_argument('-qs', '--query-style',
+                     required=False,
+                     type=AttrStyle,
+                     help="Style of query attributes: camelized, dasherized, unerscored. Default is dasherized.",
+                     default=AttrStyle.DASHERIZED)
+    sub.add_argument('-rs', '--request-style',
+                     required=False,
+                     type=AttrStyle,
+                     help="Style of request attributes: camelized, dasherized, unerscored. Default is camelized.",
+                     default=AttrStyle.CAMELIZED)
     sub.add_argument('-n', '--name', required=True,
                      help="Name of a newly generated Python client (package name).")
     sub.add_argument('-f', '--force-overwrite', required=False, action='store_true',
@@ -42,7 +53,13 @@ def main(args: argparse.Namespace, in_channel=sys.stdin, out_channel=sys.stdout)
 
     spec = parse_spec(python_data)
 
-    layout = filegen.client_layout(spec, Path(args.out_dir), args.name)
+    layout = filegen.get_project_layout(
+        spec=spec,
+        root=Path(args.out_dir),
+        name=args.name,
+        query_style=args.query_style,
+        request_style=args.request_style,
+    )
 
     can_proceed = _overwrite_if_allowed_and_required(args, layout.root)
     if not can_proceed:
