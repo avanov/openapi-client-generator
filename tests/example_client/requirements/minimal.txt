@@ -1,2 +1,2 @@
-typeit>=3.9.1.4
+typeit>=3.9.1.6
 requests

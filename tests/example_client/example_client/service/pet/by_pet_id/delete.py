@@ -2,7 +2,7 @@
 https://github.com/avanov/openapi-client-generator
 """
 from enum import Enum
-from typing import NamedTuple, Callable, Optional
+from typing import NamedTuple, Callable, Optional, Type
 
 from example_client.common import http
 from example_client.common.types import *
@@ -21,7 +21,7 @@ class Params(NamedTuple):
     petId: int
 
 
-Response = None
+Response = Type[None]
 
 
 class Headers(NamedTuple):

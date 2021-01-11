@@ -1,6 +1,6 @@
-typeit>=3.9.1.4
-openapi-type>=0.0.16
+openapi-type>=0.0.17
 deepmerge>=0.1.1,<0.2
+typeit
 jinja2
 pyrsistent
 inflection

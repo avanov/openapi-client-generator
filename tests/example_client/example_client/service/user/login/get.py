@@ -2,7 +2,7 @@
 https://github.com/avanov/openapi-client-generator
 """
 from enum import Enum
-from typing import NamedTuple, Callable, Optional
+from typing import NamedTuple, Callable, Optional, Type
 
 from example_client.common import http
 from example_client.common.types import *
@@ -18,9 +18,9 @@ __all__ = (
 class Query(NamedTuple):
     """Parameters for the endpoint query string"""
 
-    password: Optional[str] = None
-
     username: Optional[str] = None
+
+    password: Optional[str] = None
 
 
 Response = str
