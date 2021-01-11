@@ -18,9 +18,7 @@ __all__ = (
 class Query(NamedTuple):
     """Parameters for the endpoint query string"""
 
-    status: Optional[str] = None
-    """ available, pending, sold
-    """
+    status: Optional[status] = None
 
 
 Response = Sequence[Pet]

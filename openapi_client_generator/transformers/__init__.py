@@ -371,7 +371,7 @@ def recursive_resolve_schema(
 
     elif isinstance(schema, oas.ProductSchemaType):
         to_merge = (
-            find_reference(x, registry) if isinstance(x, oas.Reference) else x for x in schema.all_of
+            find_reference(x, registry) if isinstance(x, oas.Reference) else x for x in schema.all_of  # type: ignore
         )
         to_merge = (x._asdict() for x in to_merge)
         red: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
@@ -574,13 +574,13 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
                         break
                 else:
                     last_response = list(response.content.items())[-1][1]
-                    response_schema: Optional[oas.SchemaType] = last_response.schema
+                    response_schema = last_response.schema
 
                 if response_schema is None:
-                    response_types = [DEFAULT_RESPONSE_TYPE._replace(
+                    response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
                         name='Any',
                         common_reference_as=required_response_name
-                    )]
+                    )])
                 else:
                     actual_response_type_name, default, response_types = recursive_resolve_schema(
                         registry={},
@@ -637,7 +637,17 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
         else:
             default_value = 'None'
 
-        datatype = python_type_from_openapi_schema(param.schema)
+        param_rv = recursive_resolve_schema(
+            registry={},
+            suggested_type_name=name_normalizer(param.name),
+            schema=param.schema,
+            attr_name_normalizer=name_normalizer,
+            common_types=pmap()
+        )
+        datatype = TypeDescr(
+            name=param_rv.actual_type_name,
+            default_value=param_rv.default_value,
+        )
 
         # TODO: propagate overrides
         normalized_name = normalize_name(name_normalizer(param.name))
@@ -676,7 +686,7 @@ def add_to_set(config, path, base: frozenset, nxt: frozenset) -> frozenset:
 
 def find_reference(ref: oas.Reference, components: ResolvedTypesMap) -> oas.ObjectValue:
     if ref.ref.name not in components:
-        raise('Reference is not found in the registry')
+        raise NotImplementedError('Reference is not found in the registry')
     obj = components[ref.ref.name]
     assert isinstance(obj, oas.ObjectValue), "Referenced object is not of type ObjectValue"
     return obj
