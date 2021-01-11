@@ -121,14 +121,15 @@ DEFAULT_HEADERS_TYPE      = TypeContext(
 
 
 class EndpointMethod(NamedTuple):
-    name:              str
-    method:            oas.Operation
-    params:            Params
-    path_params_type:  TypeContext = DEFAULT_PATH_PARAMS_TYPE
-    query_params_type: TypeContext = DEFAULT_QUERY_PARAMS_TYPE
-    request_types:     Sequence[TypeContext] = pvector([DEFAULT_REQUEST_TYPE])
-    response_types:    Sequence[TypeContext] = pvector([DEFAULT_RESPONSE_TYPE])
-    headers_type:      TypeContext = DEFAULT_HEADERS_TYPE
+    name:               str
+    method:             oas.Operation
+    params:             Params
+    path_params_type:   TypeContext = DEFAULT_PATH_PARAMS_TYPE
+    query_params_type:  TypeContext = DEFAULT_QUERY_PARAMS_TYPE
+    request_types:      Sequence[TypeContext] = pvector([DEFAULT_REQUEST_TYPE])
+    response_types:     Sequence[TypeContext] = pvector([DEFAULT_RESPONSE_TYPE])
+    headers_type:       TypeContext = DEFAULT_HEADERS_TYPE
+    response_is_stream: bool = False
 
 
 SupportedMethods = Generator[EndpointMethod, None, None]
@@ -507,6 +508,7 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             request_types = [DEFAULT_REQUEST_TYPE]
 
 
+        response_is_stream = False
         if method.responses:
             supported_status = '200'
             try:
@@ -517,8 +519,10 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             for content_type, meta in response.content.items():
                 if content_type.format in (oas.ContentTypeFormat.JSON,
                                            oas.ContentTypeFormat.ANYTHING,
-                                           oas.ContentTypeFormat.FORM_URLENCODED):
+                                           oas.ContentTypeFormat.FORM_URLENCODED,
+                                           oas.ContentTypeFormat.EVENT_STREAM):
                     response_schema = meta.schema
+                    response_is_stream = content_type.format in (oas.ContentTypeFormat.EVENT_STREAM, oas.ContentTypeFormat.BINARY_STREAM)
                     break
             else:
                 last_response = list(response.content.items())[-1][1]
@@ -552,6 +556,7 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             request_types=request_types,
             response_types=response_types,
             headers_type=header_type,
+            response_is_stream=response_is_stream
         )
 
 
@@ -579,41 +584,6 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
                     datatype=datatype.name,
                     docstring=datatype.docstring,
                     is_required=param.required,
-                    default=default_value,
-                )
-            )
-        )
-    return rv
-
-
-def infer_request_type(default: TypeContext = DEFAULT_REQUEST_TYPE) -> TypeContext:
-    return default
-
-
-def infer_response_type(default: TypeContext = DEFAULT_RESPONSE_TYPE) -> TypeContext:
-    return default
-
-
-def infer_headers_type(headers: Sequence[oas.OperationParameter], default: TypeContext = DEFAULT_HEADERS_TYPE) -> TypeContext:
-    if not headers:
-        return default
-
-    rv = default
-    for hdr in headers:
-        if hdr.required:
-            default_value: Optional[str] = None
-        else:
-            default_value = 'None'
-
-        datatype = python_type_from_openapi_schema(hdr.schema)
-
-        rv = rv._replace(
-            attrs=rv.attrs.append(
-                TypeAttr(
-                    name=hdr.name,
-                    datatype=datatype.name,
-                    docstring=datatype.docstring,
-                    is_required=hdr.required,
                     default=default_value,
                 )
             )
