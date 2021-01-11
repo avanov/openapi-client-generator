@@ -419,6 +419,21 @@ def recursive_resolve_schema(
             final_types=pvector(),
         )
 
+    elif isinstance(schema, oas.InlinedObjectValue):
+        schema_ = oas.ObjectValue(
+            type='object',
+            properties=schema.properties,
+            required=schema.required,
+            description=schema.description,
+        )
+        return recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=suggested_type_name,
+            schema=schema_,
+            attr_name_normalizer=attr_name_normalizer,
+            common_types=common_types,
+        )
+
     raise NotImplementedError(f'Unsupported recursive type: {schema}')
 
 
@@ -533,7 +548,6 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
         else:
             request_types = pvector([DEFAULT_REQUEST_TYPE])
 
-
         response_is_stream = False
         required_response_name = 'Response'
         if method.responses:
@@ -541,7 +555,6 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
             try:
                 response = method.responses[supported_status]
             except KeyError:
-
                 supported_status, response = list(method.responses.items())[0]
 
             if not response.content:
@@ -556,28 +569,34 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
                                                oas.ContentTypeFormat.ANYTHING,
                                                oas.ContentTypeFormat.FORM_URLENCODED,
                                                oas.ContentTypeFormat.EVENT_STREAM):
-                        response_schema = meta.schema
+                        response_schema: Optional[oas.SchemaType] = meta.schema
                         response_is_stream = content_type.format in (oas.ContentTypeFormat.EVENT_STREAM, oas.ContentTypeFormat.BINARY_STREAM)
                         break
                 else:
                     last_response = list(response.content.items())[-1][1]
-                    response_schema = last_response.schema
+                    response_schema: Optional[oas.SchemaType] = last_response.schema
 
-                actual_response_type_name, default, response_types = recursive_resolve_schema(
-                    registry={},
-                    suggested_type_name=required_response_name,
-                    schema=response_schema,
-                    attr_name_normalizer=underscore,
-                    common_types=common_types,
-                )
-                if actual_response_type_name != required_response_name:
-                    response_types = response_types.append(
-                        DEFAULT_RESPONSE_TYPE._replace(
-                            name=actual_response_type_name,
-                            attrs=pvector(),
-                            common_reference_as=required_response_name
-                        )
+                if response_schema is None:
+                    response_types = [DEFAULT_RESPONSE_TYPE._replace(
+                        name='Any',
+                        common_reference_as=required_response_name
+                    )]
+                else:
+                    actual_response_type_name, default, response_types = recursive_resolve_schema(
+                        registry={},
+                        suggested_type_name=required_response_name,
+                        schema=response_schema,
+                        attr_name_normalizer=underscore,
+                        common_types=common_types,
                     )
+                    if actual_response_type_name != required_response_name:
+                        response_types = response_types.append(
+                            DEFAULT_RESPONSE_TYPE._replace(
+                                name=actual_response_type_name,
+                                attrs=pvector(),
+                                common_reference_as=required_response_name
+                            )
+                        )
 
         else:
             response_types = pvector([DEFAULT_RESPONSE_TYPE])
