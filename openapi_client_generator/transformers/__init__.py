@@ -298,14 +298,7 @@ def recursive_resolve_schema(
 
         # TODO: replace with a distinct alias type representation
         if schema.ref.name in common_types:
-            final_types = final_types.append(
-                TypeContext(
-                    name=schema.ref.name,
-                    attrs=pvector(),
-                    common_reference_as=suggested_type_name
-                )
-            )
-            actual_type_name = suggested_type_name
+            actual_type_name = schema.ref.name
             default = None
         else:
             to_resolve = registry[schema.ref.name]
@@ -500,19 +493,28 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
                 request_schema = list(method.request_body.content.items())[-1][1].schema
 
             required_name = 'Request'
-            py_name, default, request_types = recursive_resolve_schema(
+            actual_request_type_name, default, request_types = recursive_resolve_schema(
                 registry={},
                 suggested_type_name=required_name,
                 schema=request_schema,
                 attr_name_normalizer=underscore,
                 common_types=common_types
             )
+            if actual_request_type_name != required_name:
+                request_types = request_types.append(
+                    DEFAULT_REQUEST_TYPE._replace(
+                        name=actual_request_type_name,
+                        attrs=pvector(),
+                        common_reference_as=required_name
+                    )
+                )
 
         else:
             request_types = pvector([DEFAULT_REQUEST_TYPE])
 
 
         response_is_stream = False
+        required_response_name = 'Response'
         if method.responses:
             supported_status = '200'
             try:
@@ -524,7 +526,7 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             if not response.content:
                 response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
                     name='None',
-                    common_reference_as='Response'
+                    common_reference_as=required_response_name
                 )])
             else:
 
@@ -539,14 +541,23 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
                 else:
                     last_response = list(response.content.items())[-1][1]
                     response_schema = last_response.schema
-                if isinstance(response_schema, oas.Reference):
-                    response_types = pvector([common_types[response_schema.ref.name]._replace(common_reference_as='Response')])
-                else:
-                    py_name, default, response_types = recursive_resolve_schema(
-                        {}, 'Response', response_schema,
-                        attr_name_normalizer=underscore,
-                        common_types=common_types,
+
+                actual_response_type_name, default, response_types = recursive_resolve_schema(
+                    registry={},
+                    suggested_type_name=required_response_name,
+                    schema=response_schema,
+                    attr_name_normalizer=underscore,
+                    common_types=common_types,
+                )
+                if actual_response_type_name != required_response_name:
+                    response_types = response_types.append(
+                        DEFAULT_RESPONSE_TYPE._replace(
+                            name=actual_response_type_name,
+                            attrs=pvector(),
+                            common_reference_as=required_response_name
+                        )
                     )
+
         else:
             response_types = pvector([DEFAULT_RESPONSE_TYPE])
 

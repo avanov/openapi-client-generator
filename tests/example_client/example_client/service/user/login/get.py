@@ -11,6 +11,7 @@ from example_client.common.types import *
 __all__ = (
     "call",
     "Query",
+    "Response",
 )
 
 
@@ -20,6 +21,9 @@ class Query(NamedTuple):
     password: Optional[str] = None
 
     username: Optional[str] = None
+
+
+Response = str
 
 
 class Headers(NamedTuple):
@@ -39,11 +43,14 @@ URL = "user/login"
 parse_query, dump_query = dasherized(Query)
 
 
+parse_response, serialize_response = camelized(Response)
+
+
 def call(
     client: http.Client,
     query: Query,
     headers: Headers = Headers(),
-) -> None:
+) -> Response:
 
     url = URL
 

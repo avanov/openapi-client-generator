@@ -21,7 +21,7 @@ class Query(NamedTuple):
     tags: Optional[str] = None
 
 
-Response = Pet
+Response = Sequence[Pet]
 
 
 class Headers(NamedTuple):

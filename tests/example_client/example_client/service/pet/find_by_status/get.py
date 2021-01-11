@@ -23,7 +23,7 @@ class Query(NamedTuple):
     """
 
 
-Response = Pet
+Response = Sequence[Pet]
 
 
 class Headers(NamedTuple):

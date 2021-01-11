@@ -15,7 +15,7 @@ __all__ = (
 )
 
 
-Request = User
+Request = Sequence[User]
 
 Response = User
 

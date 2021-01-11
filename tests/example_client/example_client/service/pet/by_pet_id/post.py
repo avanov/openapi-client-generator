@@ -25,9 +25,9 @@ class Params(NamedTuple):
 class Query(NamedTuple):
     """Parameters for the endpoint query string"""
 
-    status: Optional[str] = None
-
     name: Optional[str] = None
+
+    status: Optional[str] = None
 
 
 Response = None
