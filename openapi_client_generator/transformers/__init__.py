@@ -143,7 +143,8 @@ class Endpoint(NamedTuple):
     supported_methods: SupportedMethods
 
 
-ResolvedTypes = Mapping[str, TypeContext]
+ResolvedTypesMap = PMap[str, TypeContext]
+ResolvedTypesVec = PVector[TypeContext]  # needed for ordering
 
 
 class SpecMeta(NamedTuple):
@@ -153,18 +154,19 @@ class SpecMeta(NamedTuple):
     """ original spec
     """
     paths: Mapping[EndpointSegments, Endpoint]
-    common_types: ResolvedTypes
+    common_types: ResolvedTypesVec
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
     common_types = resolve_schemas(spec.components.schemas, common_types=pmap())
+    common_types_ = pmap((x.name, x) for x in common_types)
 
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
         endpoint = Endpoint(
             path_item=item,
-            supported_methods=iter_supported_methods(common_types, item)
+            supported_methods=iter_supported_methods(common_types_, item)
         )
         paths[pth] = endpoint
 
@@ -177,19 +179,30 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
 
 def resolve_schemas(
     schemas: Mapping[str, oas.SchemaType],
-    common_types: ResolvedTypes
-) -> ResolvedTypes:
+    common_types: ResolvedTypesMap
+) -> ResolvedTypesVec:
     resolved_types: PVector[TypeContext] = pvector()
     for type_name, schema in schemas.items():
         py_name, default, resolved = recursive_resolve_schema(
-            schemas,
-            type_name,
-            schema,
+            registry=schemas,
+            suggested_type_name=type_name,
+            schema=schema,
             attr_name_normalizer=underscore,
             common_types=common_types,
         )
-        resolved_types = resolved_types.extend(resolved)
-    return {x.name: x for x in resolved_types}
+        if resolved:
+            resolved_types = resolved_types.extend(resolved)
+            common_types = common_types.set(type_name, resolved[-1])
+        else:
+            typ = TypeContext(
+                name=type_name,
+                attrs=pvector(),
+                common_reference_as=py_name
+            )
+            resolved_types = resolved_types.append(typ)
+            common_types = common_types.set(type_name, typ)
+
+    return resolved_types
 
 
 PYTHONIC = re.compile('/')
@@ -208,7 +221,7 @@ def recursive_resolve_schema(
     suggested_type_name: str,
     schema: oas.SchemaType,
     attr_name_normalizer: Callable[[str], str] = lambda x: x,
-    common_types: ResolvedTypes = pmap()
+    common_types: ResolvedTypesMap = pmap()
 ) -> Parsed:
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
@@ -299,15 +312,19 @@ def recursive_resolve_schema(
 
         # TODO: replace with a distinct alias type representation
         if schema.ref.name in common_types:
-            actual_type_name = schema.ref.name
-            default = None
+            typ = common_types[schema.ref.name]
+            return Parsed(
+                actual_type_name=typ.name,
+                default_value=None,
+                final_types=final_types
+            )
         else:
             to_resolve = registry[schema.ref.name]
             actual_type_name, default, resolved_types = recursive_resolve_schema(
-                registry,
-                schema.ref.name,
-                to_resolve,
-                attr_name_normalizer,
+                registry=registry,
+                suggested_type_name=schema.ref.name,
+                schema=to_resolve,
+                attr_name_normalizer=attr_name_normalizer,
                 common_types=common_types
             )
             final_types = final_types.extend(resolved_types)
@@ -455,7 +472,7 @@ PARAM_CONTAINERS: PMap[oas.ParamLocation, PVector[oas.OperationParameter]] = pma
 )
 
 
-def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> SupportedMethods:
+def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -> SupportedMethods:
     """
     :param spec: reference to the rest of the spec that may be useful for parsing
     :param path: current path
@@ -638,7 +655,7 @@ def add_to_set(config, path, base: frozenset, nxt: frozenset) -> frozenset:
     return base | nxt
 
 
-def find_reference(ref: oas.Reference, components: ResolvedTypes) -> oas.ObjectValue:
+def find_reference(ref: oas.Reference, components: ResolvedTypesMap) -> oas.ObjectValue:
     if ref.ref.name not in components:
         raise('Reference is not found in the registry')
     obj = components[ref.ref.name]

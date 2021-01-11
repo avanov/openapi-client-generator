@@ -13,7 +13,8 @@ import black
 from . import templates
 from ..info import DISTRIBUTION_NAME, PACKAGE_NAME
 from ..common.types import AttrStyle
-from ..transformers import SpecMeta, openapi_to_codegen_metadata, EndpointMethod, ResolvedTypes, TypeContext
+from ..transformers import SpecMeta, openapi_to_codegen_metadata, EndpointMethod, ResolvedTypesMap, TypeContext, \
+    ResolvedTypesVec
 
 README       = Path('README.md')
 MANIFEST     = Path('MANIFEST.in')
@@ -79,7 +80,7 @@ class ProjectLayout(NamedTuple):
     client_root: Path
     endpoints_root: Path
     common_root: Path
-    common_types: ResolvedTypes
+    common_types: ResolvedTypesVec
     endpoints: Endpoints
     readme: Binding
     manifest: Binding
@@ -196,12 +197,17 @@ def _copy_common_library(common_root: Path) -> None:
     copytree(str(Path(dist.location) / PACKAGE_NAME / 'common'), str(common_root))
 
 
-def _add_common_types(common_root: Path, common_types: ResolvedTypes) -> None:
+def _add_common_types(common_root: Path, common_types: ResolvedTypesVec) -> None:
+    processed = set()  # TODO: discover why duplicates exist
     with (common_root / 'types.py').open('a') as f:
-        for typ in common_types.values():
+        for typ in common_types:
+            if typ in processed:
+                continue
+            processed.add(typ)
             f.write('\n')
             f.write(render_type_context(typ))
             f.write('\n\n')
+
 
 
 def render_type_context(t: TypeContext) -> str:
