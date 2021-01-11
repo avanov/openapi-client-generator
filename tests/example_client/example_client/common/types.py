@@ -30,15 +30,15 @@ class OrderStatus(Enum):
 class Order(NamedTuple):
     """"""
 
-    id: Optional[int] = None
-
-    pet_id: Optional[int] = None
-
-    quantity: Optional[int] = None
+    status: Optional[OrderStatus] = None
 
     ship_date: Optional[str] = None
 
-    status: Optional[OrderStatus] = None
+    quantity: Optional[int] = None
+
+    pet_id: Optional[int] = None
+
+    id: Optional[int] = None
 
     complete: Optional[bool] = None
 
@@ -46,21 +46,21 @@ class Order(NamedTuple):
 class Address(NamedTuple):
     """"""
 
-    street: Optional[str] = None
+    zip: Optional[str] = None
 
-    city: Optional[str] = None
+    street: Optional[str] = None
 
     state: Optional[str] = None
 
-    zip: Optional[str] = None
+    city: Optional[str] = None
 
 
 class Customer(NamedTuple):
     """"""
 
-    id: Optional[int] = None
-
     username: Optional[str] = None
+
+    id: Optional[int] = None
 
     address: Optional[Sequence[Address]] = None
 
@@ -68,37 +68,37 @@ class Customer(NamedTuple):
 class Category(NamedTuple):
     """"""
 
-    id: Optional[int] = None
-
     name: Optional[str] = None
+
+    id: Optional[int] = None
 
 
 class User(NamedTuple):
     """"""
 
-    id: Optional[int] = None
-
     username: Optional[str] = None
 
-    first_name: Optional[str] = None
-
-    last_name: Optional[str] = None
-
-    email: Optional[str] = None
-
-    password: Optional[str] = None
+    user_status: Optional[int] = None
 
     phone: Optional[str] = None
 
-    user_status: Optional[int] = None
+    password: Optional[str] = None
+
+    last_name: Optional[str] = None
+
+    id: Optional[int] = None
+
+    first_name: Optional[str] = None
+
+    email: Optional[str] = None
 
 
 class Tag(NamedTuple):
     """"""
 
-    id: Optional[int] = None
-
     name: Optional[str] = None
+
+    id: Optional[int] = None
 
 
 class PetStatus(Enum):
@@ -110,24 +110,24 @@ class PetStatus(Enum):
 class Pet(NamedTuple):
     """"""
 
-    name: str
-
     photo_urls: Sequence[str]
 
-    id: Optional[int] = None
-
-    category: Optional[Category] = None
+    name: str
 
     tags: Optional[Sequence[Tag]] = None
 
     status: Optional[PetStatus] = None
 
+    id: Optional[int] = None
+
+    category: Optional[Category] = None
+
 
 class ApiResponse(NamedTuple):
     """"""
 
-    code: Optional[int] = None
-
     type: Optional[str] = None
 
     message: Optional[str] = None
+
+    code: Optional[int] = None

@@ -27,9 +27,9 @@ Response = Sequence[Pet]
 class Headers(NamedTuple):
     """"""
 
-    accept: str = "application/json"
-
     accept_charset: str = "utf-8"
+
+    accept: str = "application/json"
 
     authorization: Optional[str] = None
 

@@ -18,9 +18,9 @@ __all__ = (
 class Query(NamedTuple):
     """Parameters for the endpoint query string"""
 
-    password: Optional[str] = None
-
     username: Optional[str] = None
+
+    password: Optional[str] = None
 
 
 Response = str
@@ -29,9 +29,9 @@ Response = str
 class Headers(NamedTuple):
     """"""
 
-    accept: str = "application/json"
-
     accept_charset: str = "utf-8"
+
+    accept: str = "application/json"
 
     authorization: Optional[str] = None
 

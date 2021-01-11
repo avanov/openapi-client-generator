@@ -89,7 +89,7 @@ class TypeContext(NamedTuple):
     """
     @property
     def ordered_attrs(self) -> Sequence[TypeAttr]:
-        return sorted(self.attrs, key=lambda x: x.is_required, reverse=True)
+        return sorted(self.attrs, key=lambda x: (x.is_required, x.name), reverse=True)
 
 
 DEFAULT_QUERY_PARAMS_TYPE = TypeContext(name='Query', docstring='Parameters for the endpoint query string')
@@ -353,7 +353,10 @@ def recursive_resolve_schema(
             )
 
     elif isinstance(schema, oas.ProductSchemaType):
-        to_merge = (x._asdict() for x in schema.all_of)
+        to_merge = (
+            find_reference(x, registry) if isinstance(x, oas.Reference) else x for x in schema.all_of
+        )
+        to_merge = (x._asdict() for x in to_merge)
         red: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
         schema_ = oas.ObjectValue(**red)
         return recursive_resolve_schema(
@@ -633,6 +636,14 @@ def python_type_from_openapi_schema(schema: oas.SchemaType) -> TypeDescr:
 
 def add_to_set(config, path, base: frozenset, nxt: frozenset) -> frozenset:
     return base | nxt
+
+
+def find_reference(ref: oas.Reference, components: ResolvedTypes) -> oas.ObjectValue:
+    if ref.ref.name not in components:
+        raise('Reference is not found in the registry')
+    obj = components[ref.ref.name]
+    assert isinstance(obj, oas.ObjectValue), "Referenced object is not of type ObjectValue"
+    return obj
 
 
 merge_strategy = deepmerge.Merger(
