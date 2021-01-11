@@ -12,6 +12,7 @@ __all__ = (
     "call",
     "Params",
     "Request",
+    "Response",
 )
 
 
@@ -22,6 +23,8 @@ class Params(NamedTuple):
 
 
 Request = User
+
+Response = None
 
 
 class Headers(NamedTuple):
@@ -41,12 +44,15 @@ URL = "user/{username}"
 parse_request, dump_request = camelized(Request)
 
 
+parse_response, serialize_response = camelized(Response)
+
+
 def call(
     client: http.Client,
     request: Request,
     params: Params,
     headers: Headers = Headers(),
-) -> None:
+) -> Response:
 
     url = URL.format(**params._asdict())
 

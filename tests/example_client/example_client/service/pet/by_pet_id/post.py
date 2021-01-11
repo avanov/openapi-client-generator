@@ -12,6 +12,7 @@ __all__ = (
     "call",
     "Params",
     "Query",
+    "Response",
 )
 
 
@@ -24,9 +25,12 @@ class Params(NamedTuple):
 class Query(NamedTuple):
     """Parameters for the endpoint query string"""
 
+    status: Optional[str] = None
+
     name: Optional[str] = None
 
-    status: Optional[str] = None
+
+Response = None
 
 
 class Headers(NamedTuple):
@@ -46,12 +50,15 @@ URL = "pet/{pet_id}"
 parse_query, dump_query = dasherized(Query)
 
 
+parse_response, serialize_response = camelized(Response)
+
+
 def call(
     client: http.Client,
     params: Params,
     query: Query,
     headers: Headers = Headers(),
-) -> None:
+) -> Response:
 
     url = URL.format(**params._asdict())
 

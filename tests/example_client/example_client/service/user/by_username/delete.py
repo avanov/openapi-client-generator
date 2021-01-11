@@ -11,6 +11,7 @@ from example_client.common.types import *
 __all__ = (
     "call",
     "Params",
+    "Response",
 )
 
 
@@ -18,6 +19,9 @@ class Params(NamedTuple):
     """Parameters for the endpoint path placeholders"""
 
     username: str
+
+
+Response = None
 
 
 class Headers(NamedTuple):
@@ -34,11 +38,14 @@ METHOD = http.Method(__name__.split(".")[-1])
 URL = "user/{username}"
 
 
+parse_response, serialize_response = camelized(Response)
+
+
 def call(
     client: http.Client,
     params: Params,
     headers: Headers = Headers(),
-) -> None:
+) -> Response:
 
     url = URL.format(**params._asdict())
 

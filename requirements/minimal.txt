@@ -1,5 +1,5 @@
 typeit>=3.9.1.4
-openapi-type>=0.0.15
+openapi-type>=0.0.16
 deepmerge>=0.1.1,<0.2
 jinja2
 pyrsistent

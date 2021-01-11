@@ -8,7 +8,13 @@ from example_client.common import http
 from example_client.common.types import *
 
 
-__all__ = ("call",)
+__all__ = (
+    "call",
+    "Response",
+)
+
+
+Response = None
 
 
 class Headers(NamedTuple):
@@ -25,10 +31,13 @@ METHOD = http.Method(__name__.split(".")[-1])
 URL = "user/logout"
 
 
+parse_response, serialize_response = camelized(Response)
+
+
 def call(
     client: http.Client,
     headers: Headers = Headers(),
-) -> None:
+) -> Response:
 
     url = URL
 
