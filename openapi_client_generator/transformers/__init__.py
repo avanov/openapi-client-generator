@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from string import digits
 from functools import reduce
-from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Union, Callable, Any
+from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any
 
 import openapi_type as oas
 from inflection import underscore, camelize, singularize
@@ -180,7 +180,7 @@ def resolve_schemas(
 ) -> ResolvedTypes:
     resolved_types: PVector[TypeContext] = pvector()
     for type_name, schema in schemas.items():
-        py_name, resolved = recursive_resolve_schema(
+        py_name, default, resolved = recursive_resolve_schema(
             schemas,
             type_name,
             schema,
@@ -198,6 +198,7 @@ class Parsed(NamedTuple):
     actual_type_name: str
     """ name of the valid python type
     """
+    default_value: Optional[str] = None
     final_types: PVector[TypeContext] = pvector()
 
 
@@ -210,20 +211,37 @@ def recursive_resolve_schema(
 ) -> Parsed:
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
-        return Parsed(
-            actual_type_name='str',
-            final_types=pvector([
-                TypeContext(
-                    name='str',
-                    docstring='',
-                    attrs=pvector(),
-                    common_reference_as=suggested_type_name
+        if schema.enum:
+            actual_type_name = suggested_type_name
+            enum_options = pvector(
+                TypeAttr(
+                    name=underscore(PYTHONIC.sub('_', x)).upper(),
+                    datatype='str',
+                    default=f"'{x}'",
+                    is_required=True
                 )
-            ])
+                for x in schema.enum
+            )
+            final_types = final_types.append(
+                TypeContext(
+                    name=actual_type_name,
+                    docstring='',
+                    attrs=enum_options,
+                    is_enum=True
+                )
+            )
+        else:
+            actual_type_name = 'str'
+        return Parsed(
+            actual_type_name=actual_type_name,
+            final_types=final_types,
+            default_value=f"'{schema.default}'" if schema.default is not None else None
         )
+
     elif isinstance(schema, oas.IntegerValue):
         return Parsed(
             actual_type_name='int',
+            default_value=f"{schema.default}" if schema.default is not None else None,
             final_types=pvector([
                 TypeContext(
                     name='int',
@@ -236,6 +254,7 @@ def recursive_resolve_schema(
     elif isinstance(schema, oas.FloatValue):
         return Parsed(
             actual_type_name='float',
+            default_value=str(schema.default) if schema.default is not None else None,
             final_types=pvector([
                 TypeContext(
                     name='float',
@@ -248,6 +267,7 @@ def recursive_resolve_schema(
     elif isinstance(schema, oas.BooleanValue):
         return Parsed(
             actual_type_name='bool',
+            default_value=None if schema.default is None else str(schema.default),
             final_types=pvector([
                 TypeContext(
                     name='bool',
@@ -260,146 +280,19 @@ def recursive_resolve_schema(
 
     elif isinstance(schema, oas.ObjectValue):
         attrs: PVector[TypeAttr] = pvector()
-        for attr_name, attr_meta in schema.properties.items():
-            to_resolve: Union[None, oas.SchemaType, oas.RecursiveAttrs] = None
-            default = None
-            if isinstance(attr_meta, oas.StringValue):
-                if attr_meta.enum:
-                    attr_datatype = camelize(f'{suggested_type_name}_{attr_name}')
-                    final_types = final_types.append(
-                        TypeContext(
-                            name=attr_datatype,
-                            docstring='',
-                            attrs=pvector(TypeAttr(
-                                name=underscore(PYTHONIC.sub('_', x)).upper(),
-                                datatype='str',
-                                default=f"'{x}'",
-                                is_required=True
-                            ) for x in attr_meta.enum),
-                            is_enum=True
-                        )
-                    )
-                else:
-                    attr_datatype = 'str'
-                default = f"'{attr_meta.default}'" if attr_meta.default is not None else None
-
-            elif isinstance(attr_meta, oas.IntegerValue):
-                attr_datatype = 'int'
-                default = f'{attr_meta.default}' if attr_meta.default is not None else None
-
-            elif isinstance(attr_meta, oas.FloatValue):
-                attr_datatype = 'float'
-                default = f'{attr_meta.default}' if attr_meta.default is not None else None
-
-            elif isinstance(attr_meta, oas.BooleanValue):
-                attr_datatype = 'bool'
-                default = f'{attr_meta.default}' if attr_meta.default is not None else None
-
-            elif isinstance(attr_meta, oas.Reference):
-                if attr_meta.ref.location is oas.custom_types.RefTo.SCHEMAS:
-                    attr_meta_ = registry[attr_meta.ref.name]
-                    attr_datatype = camelize(f'{suggested_type_name}_{attr_name}')
-                    py_name, resolved_types = recursive_resolve_schema(
-                        registry,
-                        attr_datatype,
-                        attr_meta_,
-                        attr_name_normalizer,
-                        common_types=common_types
-                    )
-                    final_types = final_types.extend(resolved_types)
-                else:
-                    raise NotImplementedError('Reference Value')
-
-            elif isinstance(attr_meta, oas.ArrayValue):
-                attr_datatype = 'Sequence[{T}]'
-                to_resolve = attr_meta.items
-                name = camelize(f'{suggested_type_name}_{singularize(attr_name)}')
-                py_name, resolved_types = recursive_resolve_schema(
-                    registry,
-                    name,
-                    to_resolve,
-                    attr_name_normalizer,
-                    common_types=common_types
-                )
-                attr_datatype = attr_datatype.format(T=py_name)
-                final_types = final_types.extend(resolved_types)
-
-            elif isinstance(attr_meta, oas.ObjectValue):
-                attr_datatype = camelize(f'{suggested_type_name}_{attr_name}')
-                py_name, resolved_types = recursive_resolve_schema(
-                    registry,
-                    attr_datatype,
-                    attr_meta,
-                    attr_name_normalizer,
-                    common_types=common_types
-                )
-                final_types = final_types.extend(resolved_types)
-
-            elif isinstance(attr_meta, oas.ObjectWithAdditionalProperties):
-                if attr_meta.additional_properties is None:
-                    attr_datatype = 'Mapping[Any, Any]'
-                else:
-                    attr_datatype = camelize(f'{suggested_type_name}_{attr_name}')
-                    py_name, resolved_types = recursive_resolve_schema(
-                        registry,
-                        attr_datatype,
-                        attr_meta.additional_properties,
-                        attr_name_normalizer,
-                        common_types=common_types
-                    )
-                    final_types = final_types.extend(resolved_types)
-
-
-            elif isinstance(attr_meta, oas.ProductSchemaType):
-                to_merge = (x._asdict() for x in attr_meta.all_of)
-                red: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
-                attr_meta_ = oas.ObjectValue(**red)
-                attr_datatype = camelize(f'{suggested_type_name}_{attr_name}')
-                py_name, resolved_types = recursive_resolve_schema(
-                    registry,
-                    attr_datatype,
-                    attr_meta_,
-                    attr_name_normalizer,
-                    common_types=common_types
-                )
-                final_types = final_types.extend(resolved_types)
-                if attr_name in attr_meta_.required:
-                    default = None
-                else:
-                    default = 'None'
-
-            elif isinstance(attr_meta, (oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne)):
-                attr_datatype = camelize(f'{suggested_type_name}_{attr_name}')
-                py_name, resolved_types = recursive_resolve_schema(
-                    registry,
-                    attr_datatype,
-                    attr_meta,
-                    attr_name_normalizer,
-                    common_types=common_types
-                )
-                final_types = final_types.extend(resolved_types)
-
-            elif isinstance(attr_meta, oas.EmptyValue):
-                attr_datatype = 'Any'
-                default = 'None'
-
-            else:
-                raise TypeError(f'Unrecognised schema type: {attr_meta}')
-
-            if to_resolve:
-                T = 'Any'
-                if isinstance(to_resolve, oas.StringValue):
-                    T = 'str'
-                elif isinstance(to_resolve, oas.FloatValue):
-                    T = 'float'
-                elif isinstance(to_resolve, oas.BooleanValue):
-                    T = 'bool'
-
-                attr_datatype = attr_datatype.format(T=T)
-
+        for attr_name, attr_schema_type in schema.properties.items():
+            attr_type_suggested_name = camelize('_'.join([suggested_type_name, attr_name]))
+            attr_type_actual_name, default, new_types = recursive_resolve_schema(
+                registry=registry,
+                suggested_type_name=attr_type_suggested_name,
+                schema=attr_schema_type,
+                attr_name_normalizer=attr_name_normalizer,
+                common_types=common_types
+            )
+            final_types = final_types.extend(new_types)
             attrs = attrs.append(TypeAttr(
                 name=attr_name_normalizer(attr_name),
-                datatype=attr_datatype,
+                datatype=attr_type_actual_name,
                 default=default,
                 is_required=attr_name in schema.required
             ))
@@ -410,18 +303,21 @@ def recursive_resolve_schema(
                 attrs=attrs
             )
         )
-
-    elif isinstance(schema, oas.ArrayValue):
-        schema_ = schema.items
-        array_type = TypeContext(
-            name=suggested_type_name,
-            docstring=schema.description,
+        return Parsed(
+            actual_type_name=suggested_type_name,
+            default_value=None,
+            final_types=final_types
         )
 
-        final_types = final_types.append(array_type)
-        py_name, resolved_types = recursive_resolve_schema(
+    elif isinstance(schema, oas.Reference):
+        if schema.ref.location is not oas.custom_types.RefTo.SCHEMAS:
+            raise NotImplementedError('Reference Value')
+
+        schema_ = registry[schema.ref.name]
+        attr_datatype = camelize(f'{suggested_type_name}_{schema}')
+        py_name, default, resolved_types = recursive_resolve_schema(
             registry,
-            suggested_type_name,
+            attr_datatype,
             schema_,
             attr_name_normalizer,
             common_types=common_types
@@ -429,40 +325,85 @@ def recursive_resolve_schema(
         final_types = final_types.extend(resolved_types)
 
     elif isinstance(schema, oas.Reference):
-        if schema.ref.location is oas.custom_types.RefTo.SCHEMAS:
-            if schema.ref.name in common_types:
-                final_types = final_types.append(
-                    TypeContext(
-                        name=schema.ref.name,
-                        attrs=pvector(),
-                        common_reference_as=suggested_type_name
-                    )
+        # Represents a reference to an object in common types domain
+        if schema.ref.location is not oas.custom_types.RefTo.SCHEMAS:
+            raise NotImplementedError(
+                f'This reference location is not supported yet: {schema.ref.location}'
+            )
+
+        # TODO: replace with a distinct alias type representation
+        if schema.ref.name in common_types:
+            final_types = final_types.append(
+                TypeContext(
+                    name=schema.ref.name,
+                    attrs=pvector(),
+                    common_reference_as=suggested_type_name
                 )
-            else:
-                to_resolve = registry[schema.ref.name]
-                py_name, resolved_types = recursive_resolve_schema(
-                    registry,
-                    schema.ref.name,
-                    to_resolve,
-                    attr_name_normalizer,
-                    common_types=common_types
-                )
-                final_types = final_types.extend(resolved_types)
+            )
+            actual_type_name = suggested_type_name
+            default = None
         else:
-            raise NotImplementedError('Reference Value 2')
+            to_resolve = registry[schema.ref.name]
+            actual_type_name, default, resolved_types = recursive_resolve_schema(
+                registry,
+                schema.ref.name,
+                to_resolve,
+                attr_name_normalizer,
+                common_types=common_types
+            )
+            final_types = final_types.extend(resolved_types)
+        return Parsed(
+            actual_type_name=actual_type_name,
+            default=default,
+            final_types=final_types
+        )
+
+    elif isinstance(schema, oas.ArrayValue):
+        sequence_type_literal = 'Sequence[{T}]'
+        to_resolve = schema.items
+        name = singularize(suggested_type_name)
+        actual_type_name, default, resolved_types = recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=name,
+            schema=to_resolve,
+            attr_name_normalizer=attr_name_normalizer,
+            common_types=common_types,
+        )
+        sequence_type_literal = sequence_type_literal.format(T=actual_type_name)
+        final_types = final_types.extend(resolved_types)
+        return Parsed(
+            actual_type_name=sequence_type_literal,
+            default_value=None,
+            final_types=final_types,
+        )
+
+    elif isinstance(schema, oas.ObjectWithAdditionalProperties):
+        if schema.additional_properties is None:
+            return Parsed(
+                actual_type_name='Mapping[Any, Any]',
+                default_value=None,
+                final_types=final_types
+            )
+        else:
+            return recursive_resolve_schema(
+                registry=registry,
+                suggested_type_name=suggested_type_name,
+                schema=schema.additional_properties,
+                attr_name_normalizer=attr_name_normalizer,
+                common_types=common_types,
+            )
 
     elif isinstance(schema, oas.ProductSchemaType):
         to_merge = (x._asdict() for x in schema.all_of)
-        red_: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
-        attr_meta_ = oas.ObjectValue(**red_)
-        py_name, resolved_types = recursive_resolve_schema(
-            registry,
-            suggested_type_name,
-            attr_meta_,
-            attr_name_normalizer,
+        red: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
+        schema_ = oas.ObjectValue(**red)
+        return recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=suggested_type_name,
+            schema=schema_,
+            attr_name_normalizer=attr_name_normalizer,
             common_types=common_types
         )
-        final_types = final_types.extend(resolved_types)
 
     elif isinstance(schema, (oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne)):
         if isinstance(schema, oas.UnionSchemaTypeAny):
@@ -470,38 +411,37 @@ def recursive_resolve_schema(
         else:
             items = schema.one_of
         options = []
-        for var_num, schema_ in enumerate(items, start=1):
-            variant_name = camelize(f'{suggested_type_name}_var{var_num}')
-            options.append(variant_name)
-            py_name, resolved_types = recursive_resolve_schema(
-                registry,
-                variant_name,
-                schema_,
-                attr_name_normalizer,
+        for schema_ in items:
+            variant_name = camelize(f'{suggested_type_name}_var{len(options) + 1}')
+            actual_variant_py_name, default, resolved_types = recursive_resolve_schema(
+                registry=registry,
+                suggested_type_name=variant_name,
+                schema=schema_,
+                attr_name_normalizer=attr_name_normalizer,
                 common_types=common_types,
             )
-            final_types = final_types.extend(resolved_types)
+            options.append(actual_variant_py_name)
 
-        final_types.append(
-            TypeContext(
-                name=f'Union[{", ".join(options)}]',
-                attrs=pvector(),
-                common_reference_as=suggested_type_name
-            )
+            # We don't need to append aliases to the final types as they are already there
+            # either as primitive types, or as types that have been parsed already
+            if actual_variant_py_name == variant_name:
+                final_types = final_types.extend(resolved_types)
+
+        return Parsed(
+            actual_type_name=f'Union[{", ".join(options)}]',
+            default_value=None,
+            final_types=final_types
         )
 
-    elif isinstance(schema, oas.ObjectWithAdditionalProperties):
-        schema.additional_properties
-
     elif isinstance(schema, oas.EmptyValue):
-        schema
-    else:
-        raise NotImplementedError(f'Unsupported recursive type: {schema}')
+        return Parsed(
+            actual_type_name='Any',
+            default_value='None',
+            final_types=pvector(),
+        )
 
-    return Parsed(
-        actual_type_name=suggested_type_name,
-        final_types=final_types
-    )
+    raise NotImplementedError(f'Unsupported recursive type: {schema}')
+
 
 
 def api_path_to_filepath(api_path: str, sep: str = '/') -> EndpointSegments:
@@ -597,7 +537,7 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             if isinstance(request_schema, oas.Reference):
                 request_types = pvector([common_types[request_schema.ref.name]._replace(common_reference_as='Request')])
             else:
-                py_name, request_types = recursive_resolve_schema(
+                py_name, default, request_types = recursive_resolve_schema(
                     {}, 'Request', request_schema,
                     attr_name_normalizer=underscore,
                     common_types=common_types
@@ -636,7 +576,7 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
                 if isinstance(response_schema, oas.Reference):
                     response_types = pvector([common_types[response_schema.ref.name]._replace(common_reference_as='Response')])
                 else:
-                    py_name, response_types = recursive_resolve_schema(
+                    py_name, default, response_types = recursive_resolve_schema(
                         {}, 'Response', response_schema,
                         attr_name_normalizer=underscore,
                         common_types=common_types,
