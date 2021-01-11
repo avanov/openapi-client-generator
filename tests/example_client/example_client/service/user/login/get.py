@@ -18,9 +18,9 @@ __all__ = (
 class Query(NamedTuple):
     """Parameters for the endpoint query string"""
 
-    username: Optional[str] = None
-
     password: Optional[str] = None
+
+    username: Optional[str] = None
 
 
 Response = str

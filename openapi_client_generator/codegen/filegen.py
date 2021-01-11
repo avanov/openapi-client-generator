@@ -3,12 +3,12 @@
 from itertools import chain
 from pathlib import Path
 from shutil import copytree
-import subprocess
-from typing import NamedTuple, Mapping, Iterable, Union, Any
+from typing import NamedTuple, Mapping, Iterable, Union
 from pkg_resources import get_distribution
 
 from inflection import underscore
 import openapi_type as oas
+import black
 
 from . import templates
 from ..info import DISTRIBUTION_NAME, PACKAGE_NAME
@@ -208,4 +208,13 @@ def render_type_context(t: TypeContext) -> str:
 
 
 def _code_style(dir: Path) -> None:
-    subprocess.run(["black", "--quiet", "--line-length", "100", str(dir.absolute())])
+    for file in dir.rglob('**/*.py'):
+        black.format_file_in_place(
+            src=file.absolute(),
+            fast=False,
+            mode=black.Mode(
+                line_length=100,
+                target_versions={black.TargetVersion.PY38}
+            ),
+            write_back=black.WriteBack.YES
+        )

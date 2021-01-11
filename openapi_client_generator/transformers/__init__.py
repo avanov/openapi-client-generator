@@ -271,7 +271,8 @@ def recursive_resolve_schema(
             )
             final_types = final_types.extend(new_types)
             attrs = attrs.append(TypeAttr(
-                name=attr_name_normalizer(attr_name),
+                # TODO: propagate overrides
+                name=normalize_name(attr_name_normalizer(attr_name)),
                 datatype=attr_type_actual_name,
                 default=default,
                 is_required=attr_name in schema.required
@@ -599,7 +600,8 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
 
         datatype = python_type_from_openapi_schema(param.schema)
 
-        normalized_name = name_normalizer(param.name)
+        # TODO: propagate overrides
+        normalized_name = normalize_name(name_normalizer(param.name))
 
         rv = rv._replace(
             attrs=rv.attrs.append(
