@@ -1,15 +1,30 @@
 from enum import Enum
 from typing import Optional, Sequence, Any, NamedTuple
-from openapi_type.custom_types import TypeGenerator
+
+import inflection
+from typeit import TypeConstructor, flags
 
 
-generate_constructor_and_serializer = TypeGenerator
+generate_constructor_and_serializer = TypeConstructor
+
+
+class AttrStyle(Enum):
+    CAMELIZED = "camelized"
+    DASHERIZED = "dasherized"
+    UNDERSCORED = "underscored"
+
+
+camelized = TypeConstructor & flags.GlobalNameOverride(
+    lambda x: inflection.camelize(x, uppercase_first_letter=False)
+)
+dasherized = TypeConstructor & flags.GlobalNameOverride(inflection.dasherize)
+underscored = TypeConstructor
 
 
 class OrderStatus(Enum):
-    PLACED = "x"
-    APPROVED = "x"
-    DELIVERED = "x"
+    PLACED = "placed"
+    APPROVED = "approved"
+    DELIVERED = "delivered"
 
 
 class Order(NamedTuple):
@@ -17,11 +32,11 @@ class Order(NamedTuple):
 
     id: Optional[int] = None
 
-    petId: Optional[int] = None
+    pet_id: Optional[int] = None
 
     quantity: Optional[int] = None
 
-    shipDate: Optional[str] = None
+    ship_date: Optional[str] = None
 
     status: Optional[OrderStatus] = None
 
@@ -65,9 +80,9 @@ class User(NamedTuple):
 
     username: Optional[str] = None
 
-    firstName: Optional[str] = None
+    first_name: Optional[str] = None
 
-    lastName: Optional[str] = None
+    last_name: Optional[str] = None
 
     email: Optional[str] = None
 
@@ -75,7 +90,7 @@ class User(NamedTuple):
 
     phone: Optional[str] = None
 
-    userStatus: Optional[int] = None
+    user_status: Optional[int] = None
 
 
 class Tag(NamedTuple):
@@ -95,9 +110,9 @@ class PetCategory(NamedTuple):
 
 
 class PetStatus(Enum):
-    AVAILABLE = "x"
-    PENDING = "x"
-    SOLD = "x"
+    AVAILABLE = "available"
+    PENDING = "pending"
+    SOLD = "sold"
 
 
 class Pet(NamedTuple):
@@ -105,7 +120,7 @@ class Pet(NamedTuple):
 
     name: str
 
-    photoUrls: Sequence[str]
+    photo_urls: Sequence[str]
 
     id: Optional[int] = None
 

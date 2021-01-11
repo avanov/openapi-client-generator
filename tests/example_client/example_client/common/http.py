@@ -62,7 +62,8 @@ class Client(NamedTuple):
         headers: Headers = pmap(),
         query: Optional[Mapping[str, Any]] = None,
         payload: Optional[Mapping[str, Any]] = None,
-    ) -> Mapping:
+        is_stream: bool = False,
+    ) -> requests.Response:
         url = "/".join([self.service_url.rstrip("/"), url.lstrip("/")])
 
         req = requests.Request(
@@ -73,6 +74,4 @@ class Client(NamedTuple):
             headers={dasherize(k): v for k, v in headers.items() if v is not None},
         ).prepare()
 
-        resp = http.send(req, stream=False, timeout=self.request_timeout)
-        resp.status_code
-        return {}
+        return http.send(req, stream=is_stream, timeout=self.request_timeout)

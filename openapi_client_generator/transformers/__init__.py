@@ -157,7 +157,7 @@ class SpecMeta(NamedTuple):
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
-    common_types = resolve_schemas(spec.components.schemas)
+    common_types = resolve_schemas(spec.components.schemas, common_types=pmap())
 
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
@@ -174,11 +174,20 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     )
 
 
-def resolve_schemas(schemas: Mapping[str, oas.SchemaType]) -> ResolvedTypes:
+def resolve_schemas(
+    schemas: Mapping[str, oas.SchemaType],
+    common_types: ResolvedTypes
+) -> ResolvedTypes:
     resolved_types: PVector[TypeContext] = pvector()
     for type_name, schema in schemas.items():
         resolved_types = resolved_types.extend(
-            recursive_resolve_schema(schemas, type_name, schema, attr_name_normalizer=underscore)
+            recursive_resolve_schema(
+                schemas,
+                type_name,
+                schema,
+                attr_name_normalizer=underscore,
+                common_types=common_types,
+            )
         )
     return {x.name: x for x in resolved_types}
 
@@ -190,7 +199,8 @@ def recursive_resolve_schema(
     registry: Mapping[str, oas.SchemaType],
     type_name: str,
     schema: oas.SchemaType,
-    attr_name_normalizer: Callable[[str], str] = lambda x: x
+    attr_name_normalizer: Callable[[str], str] = lambda x: x,
+    common_types: ResolvedTypes = pmap()
 ) -> PVector[TypeContext]:
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
@@ -256,7 +266,8 @@ def recursive_resolve_schema(
                         registry,
                         attr_datatype,
                         attr_meta_,
-                        attr_name_normalizer
+                        attr_name_normalizer,
+                        common_types=common_types
                     )
                     final_types = final_types.extend(resolved_types)
                 else:
@@ -273,11 +284,12 @@ def recursive_resolve_schema(
                     attr_datatype,
                     attr_meta,
                     attr_name_normalizer,
+                    common_types=common_types
                 )
                 final_types = final_types.extend(resolved_types)
 
             elif isinstance(attr_meta, oas.ObjectWithAdditionalProperties):
-                raise NotImplementedError(' Additional properties')
+                pass
 
             elif isinstance(attr_meta, oas.ProductSchemaType):
                 to_merge = (x._asdict() for x in attr_meta.all_of)
@@ -288,6 +300,7 @@ def recursive_resolve_schema(
                     attr_datatype,
                     attr_meta_,
                     attr_name_normalizer,
+                    common_types=common_types
                 )
                 final_types = final_types.extend(resolved_types)
                 if attr_name in attr_meta_.required:
@@ -302,6 +315,7 @@ def recursive_resolve_schema(
                     attr_datatype,
                     attr_meta,
                     attr_name_normalizer,
+                    common_types=common_types
                 )
                 final_types = final_types.extend(resolved_types)
 
@@ -349,19 +363,30 @@ def recursive_resolve_schema(
             type_name,
             schema_,
             attr_name_normalizer,
+            common_types=common_types
         )
         final_types = final_types.extend(resolved_types)
 
     elif isinstance(schema, oas.Reference):
         if schema.ref.location is oas.custom_types.RefTo.SCHEMAS:
-            to_resolve = registry[schema.ref.name]
-            resolved_types = recursive_resolve_schema(
-                registry,
-                schema.ref.name,
-                to_resolve,
-                attr_name_normalizer
-            )
-            final_types = final_types.extend(resolved_types)
+            if schema.ref.name in common_types:
+                final_types = final_types.append(
+                    TypeContext(
+                        name=schema.ref.name,
+                        attrs=pvector(),
+                        common_reference_as=type_name
+                    )
+                )
+            else:
+                to_resolve = registry[schema.ref.name]
+                resolved_types = recursive_resolve_schema(
+                    registry,
+                    schema.ref.name,
+                    to_resolve,
+                    attr_name_normalizer,
+                    common_types=common_types
+                )
+                final_types = final_types.extend(resolved_types)
         else:
             raise NotImplementedError('Reference Value 2')
 
@@ -373,6 +398,7 @@ def recursive_resolve_schema(
             type_name,
             attr_meta_,
             attr_name_normalizer,
+            common_types=common_types
         )
         final_types = final_types.extend(resolved_types)
 
@@ -390,6 +416,7 @@ def recursive_resolve_schema(
                 variant_name,
                 schema_,
                 attr_name_normalizer,
+                common_types=common_types,
             )
             final_types = final_types.extend(resolved_types)
 
@@ -400,6 +427,9 @@ def recursive_resolve_schema(
                 common_reference_as=type_name
             )
         )
+
+    elif isinstance(schema, oas.ObjectWithAdditionalProperties):
+        pass
 
     else:
         raise NotImplementedError(f'Unsupported recursive type: {schema}')
@@ -502,7 +532,8 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             else:
                 request_types = recursive_resolve_schema(
                     {}, 'Request', request_schema,
-                    attr_name_normalizer=underscore
+                    attr_name_normalizer=underscore,
+                    common_types=common_types
                 )
         else:
             request_types = [DEFAULT_REQUEST_TYPE]
@@ -514,26 +545,32 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             try:
                 response = method.responses[supported_status]
             except KeyError:
-                raise NotImplementedError(f'Response status code: {list(method.responses.keys())}')
 
-            for content_type, meta in response.content.items():
-                if content_type.format in (oas.ContentTypeFormat.JSON,
-                                           oas.ContentTypeFormat.ANYTHING,
-                                           oas.ContentTypeFormat.FORM_URLENCODED,
-                                           oas.ContentTypeFormat.EVENT_STREAM):
-                    response_schema = meta.schema
-                    response_is_stream = content_type.format in (oas.ContentTypeFormat.EVENT_STREAM, oas.ContentTypeFormat.BINARY_STREAM)
-                    break
+                supported_status, response = list(method.responses.items())[0]
+
+            if not response.content:
+                response_types = [DEFAULT_RESPONSE_TYPE]
             else:
-                last_response = list(response.content.items())[-1][1]
-                response_schema = last_response.schema
-            if isinstance(response_schema, oas.Reference):
-                response_types = [common_types[response_schema.ref.name]._replace(common_reference_as='Response')]
-            else:
-                response_types = recursive_resolve_schema(
-                    {}, 'Response', response_schema,
-                    attr_name_normalizer=underscore
-                )
+
+                for content_type, meta in response.content.items():
+                    if content_type.format in (oas.ContentTypeFormat.JSON,
+                                               oas.ContentTypeFormat.ANYTHING,
+                                               oas.ContentTypeFormat.FORM_URLENCODED,
+                                               oas.ContentTypeFormat.EVENT_STREAM):
+                        response_schema = meta.schema
+                        response_is_stream = content_type.format in (oas.ContentTypeFormat.EVENT_STREAM, oas.ContentTypeFormat.BINARY_STREAM)
+                        break
+                else:
+                    last_response = list(response.content.items())[-1][1]
+                    response_schema = last_response.schema
+                if isinstance(response_schema, oas.Reference):
+                    response_types = [common_types[response_schema.ref.name]._replace(common_reference_as='Response')]
+                else:
+                    response_types = recursive_resolve_schema(
+                        {}, 'Response', response_schema,
+                        attr_name_normalizer=underscore,
+                        common_types=common_types,
+                    )
         else:
             response_types = [DEFAULT_RESPONSE_TYPE]
 
