@@ -166,6 +166,7 @@ def generate_from_layout(l: ProjectLayout) -> None:
     _add_common_types(l.common_root, l.common_types)
     _generate_endpoints(l.endpoints)
     _generate_imports(l.endpoints_root)
+    _mark_as_typed(l.client_root)
     _code_style(l.client_root)
 
 
@@ -205,6 +206,10 @@ def _add_common_types(common_root: Path, common_types: ResolvedTypes) -> None:
 
 def render_type_context(t: TypeContext) -> str:
     return templates.DATA_TYPE.render({x: getattr(t, x) for x in chain(t._fields, ['ordered_attrs'])}).strip()
+
+
+def _mark_as_typed(dir: Path) -> None:
+    (dir / 'py.typed').touch(mode=0o644, exist_ok=False)
 
 
 def _code_style(dir: Path) -> None:

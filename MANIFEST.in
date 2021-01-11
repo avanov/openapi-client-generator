@@ -2,5 +2,6 @@
 include README.rst CHANGELOG.rst LICENSE.txt
 recursive-include requirements *.txt
 recursive-include openapi_client_generator
+recursive-include openapi_client_generator py.typed
 exclude requirements/test.txt
 prune tests
