@@ -7,6 +7,19 @@ import example_client
 ])
 def test_client(service_url):
     client = example_client.common.http.Client(service_url=service_url)
-    action = example_client.service.pet.post.call(client)
+    endpoint1 = example_client.service.pet.post
+    action1 = endpoint1.call(
+        client,
+        request=endpoint1.Request(
+            name='pet',
+            photo_urls=[],
+        )
+    )
 
-    action = example_client.service.pet.find_by_tags.get.call(client)
+    endpoint2 = example_client.service.pet.find_by_tags.get
+    action2 = endpoint2.call(
+        client,
+        query=endpoint2.Query(
+            tags=['term']
+        )
+    )
