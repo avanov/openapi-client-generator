@@ -62,7 +62,7 @@ class Customer(NamedTuple):
 
     username: Optional[str] = None
 
-    address: Optional[Sequence[CustomerAddress]] = None
+    address: Optional[Sequence[Address]] = None
 
 
 class Category(NamedTuple):
@@ -101,17 +101,6 @@ class Tag(NamedTuple):
     name: Optional[str] = None
 
 
-class PetCategory(NamedTuple):
-    """"""
-
-    id: Optional[int] = None
-
-    name: Optional[str] = None
-
-
-PetPhotoUrl = str
-
-
 class PetStatus(Enum):
     AVAILABLE = "available"
     PENDING = "pending"
@@ -127,9 +116,9 @@ class Pet(NamedTuple):
 
     id: Optional[int] = None
 
-    category: Optional[PetCategory] = None
+    category: Optional[Category] = None
 
-    tags: Optional[Sequence[PetTag]] = None
+    tags: Optional[Sequence[Tag]] = None
 
     status: Optional[PetStatus] = None
 

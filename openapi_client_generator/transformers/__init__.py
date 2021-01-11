@@ -6,6 +6,7 @@ from string import digits
 from functools import reduce
 from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any
 
+from typeit.utils import normalize_name
 import openapi_type as oas
 from inflection import underscore, camelize, singularize
 from pyrsistent.typing import PVector, PMap
@@ -242,40 +243,19 @@ def recursive_resolve_schema(
         return Parsed(
             actual_type_name='int',
             default_value=f"{schema.default}" if schema.default is not None else None,
-            final_types=pvector([
-                TypeContext(
-                    name='int',
-                    docstring='',
-                    attrs=pvector(),
-                    common_reference_as=suggested_type_name
-                )
-            ])
+            final_types=pvector()
         )
     elif isinstance(schema, oas.FloatValue):
         return Parsed(
             actual_type_name='float',
             default_value=str(schema.default) if schema.default is not None else None,
-            final_types=pvector([
-                TypeContext(
-                    name='float',
-                    docstring='',
-                    attrs=pvector(),
-                    common_reference_as=suggested_type_name
-                )
-            ])
+            final_types=pvector()
         )
     elif isinstance(schema, oas.BooleanValue):
         return Parsed(
             actual_type_name='bool',
             default_value=None if schema.default is None else str(schema.default),
-            final_types=pvector([
-                TypeContext(
-                    name='bool',
-                    docstring='',
-                    attrs=pvector(),
-                    common_reference_as=suggested_type_name
-                )
-            ])
+            final_types=pvector()
         )
 
     elif isinstance(schema, oas.ObjectValue):
@@ -310,21 +290,6 @@ def recursive_resolve_schema(
         )
 
     elif isinstance(schema, oas.Reference):
-        if schema.ref.location is not oas.custom_types.RefTo.SCHEMAS:
-            raise NotImplementedError('Reference Value')
-
-        schema_ = registry[schema.ref.name]
-        attr_datatype = camelize(f'{suggested_type_name}_{schema}')
-        py_name, default, resolved_types = recursive_resolve_schema(
-            registry,
-            attr_datatype,
-            schema_,
-            attr_name_normalizer,
-            common_types=common_types
-        )
-        final_types = final_types.extend(resolved_types)
-
-    elif isinstance(schema, oas.Reference):
         # Represents a reference to an object in common types domain
         if schema.ref.location is not oas.custom_types.RefTo.SCHEMAS:
             raise NotImplementedError(
@@ -354,7 +319,7 @@ def recursive_resolve_schema(
             final_types = final_types.extend(resolved_types)
         return Parsed(
             actual_type_name=actual_type_name,
-            default=default,
+            default_value=default,
             final_types=final_types
         )
 
@@ -410,7 +375,7 @@ def recursive_resolve_schema(
             items = schema.any_of
         else:
             items = schema.one_of
-        options = []
+        options: PVector[str] = pvector()
         for schema_ in items:
             variant_name = camelize(f'{suggested_type_name}_var{len(options) + 1}')
             actual_variant_py_name, default, resolved_types = recursive_resolve_schema(
@@ -420,7 +385,7 @@ def recursive_resolve_schema(
                 attr_name_normalizer=attr_name_normalizer,
                 common_types=common_types,
             )
-            options.append(actual_variant_py_name)
+            options = options.append(actual_variant_py_name)
 
             # We don't need to append aliases to the final types as they are already there
             # either as primitive types, or as types that have been parsed already
@@ -534,14 +499,15 @@ def iter_supported_methods(common_types: ResolvedTypes, path: oas.PathItem) -> S
             else:
                 request_schema = list(method.request_body.content.items())[-1][1].schema
 
-            if isinstance(request_schema, oas.Reference):
-                request_types = pvector([common_types[request_schema.ref.name]._replace(common_reference_as='Request')])
-            else:
-                py_name, default, request_types = recursive_resolve_schema(
-                    {}, 'Request', request_schema,
-                    attr_name_normalizer=underscore,
-                    common_types=common_types
-                )
+            required_name = 'Request'
+            py_name, default, request_types = recursive_resolve_schema(
+                registry={},
+                suggested_type_name=required_name,
+                schema=request_schema,
+                attr_name_normalizer=underscore,
+                common_types=common_types
+            )
+
         else:
             request_types = pvector([DEFAULT_REQUEST_TYPE])
 

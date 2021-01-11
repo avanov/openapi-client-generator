@@ -12,7 +12,6 @@ __all__ = (
     "call",
     "Params",
     "Query",
-    "Request",
     "Response",
 )
 
@@ -28,8 +27,6 @@ class Query(NamedTuple):
 
     additional_metadata: Optional[str] = None
 
-
-Request = str
 
 Response = ApiResponse
 
@@ -51,15 +48,11 @@ URL = "pet/{pet_id}/uploadImage"
 parse_query, dump_query = dasherized(Query)
 
 
-parse_request, dump_request = camelized(Request)
-
-
 parse_response, serialize_response = camelized(Response)
 
 
 def call(
     client: http.Client,
-    request: Request,
     params: Params,
     query: Query,
     headers: Headers = Headers(),
@@ -72,7 +65,6 @@ def call(
         url=url,
         headers=headers._asdict(),
         query=dump_query(query),
-        payload=dump_request(request),
         is_stream=False,
     )
     return parse_response(resp.json())
