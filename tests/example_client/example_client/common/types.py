@@ -43,16 +43,6 @@ class Order(NamedTuple):
     complete: Optional[bool] = None
 
 
-class Customer(NamedTuple):
-    """"""
-
-    id: Optional[int] = None
-
-    username: Optional[str] = None
-
-    address: Optional[Sequence[Any]] = None
-
-
 class Address(NamedTuple):
     """"""
 
@@ -63,6 +53,16 @@ class Address(NamedTuple):
     state: Optional[str] = None
 
     zip: Optional[str] = None
+
+
+class Customer(NamedTuple):
+    """"""
+
+    id: Optional[int] = None
+
+    username: Optional[str] = None
+
+    address: Optional[Sequence[CustomerAddress]] = None
 
 
 class Category(NamedTuple):
@@ -109,6 +109,9 @@ class PetCategory(NamedTuple):
     name: Optional[str] = None
 
 
+PetPhotoUrl = str
+
+
 class PetStatus(Enum):
     AVAILABLE = "available"
     PENDING = "pending"
@@ -126,7 +129,7 @@ class Pet(NamedTuple):
 
     category: Optional[PetCategory] = None
 
-    tags: Optional[Sequence[Any]] = None
+    tags: Optional[Sequence[PetTag]] = None
 
     status: Optional[PetStatus] = None
 
