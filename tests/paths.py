@@ -10,5 +10,8 @@ SPECS = [
         'api-with-examples',
         'callback-example',
         'link-example',
-        'uspto'
-]]
+        'uspto',
+    ]
+] + [
+    (x, TESTS_ROOT / f'{x}.json') for x in ['example-client-spec']
+]

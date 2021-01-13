@@ -36,6 +36,7 @@ pkgs.stdenv.mkDerivation {
         libzip
         zlib
         which
+        jq
     ] ++ devLibs;
     shellHook = ''
         # set SOURCE_DATE_EPOCH so that we can use python wheels
@@ -56,6 +57,7 @@ pkgs.stdenv.mkDerivation {
             $VENV_DIR/bin/python -m pip install -e $PWD
             $VENV_DIR/bin/python -m pip install -r $PWD/requirements/test.txt
             $VENV_DIR/bin/python -m pip install -r $PWD/requirements/extras/*
+            $VENV_DIR/bin/python -m pip install -e $PWD/tests/example_client
         fi
     '';
 }

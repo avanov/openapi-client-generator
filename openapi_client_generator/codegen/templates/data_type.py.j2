@@ -1,0 +1,23 @@
+{% if attrs or common_reference_as  %}
+{% if common_reference_as %}
+{{ common_reference_as }} = {% if name == 'None' %}Type[{{ name }}]{% else %}{{ name }}{% endif %}
+{% else %}
+{% if is_enum %}
+class {{ name }}(Enum):
+    {% for attr in attrs -%}
+    {{ attr.name }} = {{ attr.default_repr }}
+    {% endfor %}
+{% else %}
+class {{ name }}(NamedTuple):
+    """ {{ docstring }}
+    """
+    {% for attr in ordered_attrs -%}
+    {{ attr.name }}: {{ attr.datatype_repr }}{% if attr.default_repr %} = {{ attr.default_repr }}{% endif %}
+    {% if attr.docstring -%}
+    """ {{ attr.docstring }}
+    """
+    {% endif %}
+    {% endfor %}
+{% endif %}
+{% endif %}
+{% endif %}

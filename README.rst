@@ -11,7 +11,7 @@
     :alt: Requirements Status
 
 .. image:: https://readthedocs.org/projects/openapi-client-generator/badge/?version=latest
-    :target: http://typeit.readthedocs.org/en/latest/
+    :target: https://openapi-client-generator.readthedocs.io/en/latest/
     :alt: Documentation Status
 
 .. image:: http://img.shields.io/pypi/v/openapi-client-generator.svg
@@ -47,7 +47,9 @@ Documentation is hosted on ReadTheDocs: https://openapi-client-generator.readthe
 Test framework
 --------------
 
-Run existing test suite with
+The project uses `Nix <https://nixos.org/>`_ for bootstrapping its dev environment.
+
+You can run existing test suite with
 
 .. code::
 
