@@ -27,11 +27,18 @@ example-client:
 	$(CLI) gen -f -s "$(TEST_DIR)/example-client-spec.json" -o "$(TEST_DIR)/example_client" -n example-client
 
 
-publish: example-client test
-	rm -rf $(BUILD_DIR) $(DIST_DIR)
+publish: example-client test clean | do-publish
+	@echo "Done publishing."
+
+
+do-publish:
 	python $(PROJECT_ROOT)/setup.py sdist bdist_wheel
 	twine upload $(DIST_DIR)/*
 
 
 test-all: | example-client test
 	@echo "Done."
+
+
+clean:
+	rm -rf $(BUILD_DIR) $(DIST_DIR)
