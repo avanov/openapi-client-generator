@@ -59,6 +59,9 @@ class TypeAttr(NamedTuple):
     @property
     def datatype_repr(self) -> str:
         if not self.is_required:
+            # trying to reduce redundant Optional wrapper
+            if self.default not in (None, 'None'):
+                return self.datatype
             return f'Optional[{self.datatype}]'
         return self.datatype
 

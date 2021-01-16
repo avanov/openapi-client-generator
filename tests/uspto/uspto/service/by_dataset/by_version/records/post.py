@@ -29,9 +29,9 @@ class Request(NamedTuple):
 
     criteria: str = "*:*"
 
-    start: Optional[int] = 0
+    start: int = 0
 
-    rows: Optional[int] = 100
+    rows: int = 100
 
 
 Response = Sequence[Mapping[Any, Any]]
