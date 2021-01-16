@@ -51,7 +51,7 @@ do-publish:
 	twine upload $(DIST_DIR)/*
 
 
-test-all: | example-client test
+test-all: | example-clients test
 	@echo "Done."
 
 
