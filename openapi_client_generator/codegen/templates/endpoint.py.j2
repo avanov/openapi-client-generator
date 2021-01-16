@@ -32,23 +32,23 @@ METHOD = http.Method(__name__.split('.')[-1])
 URL = "{{ endpoint_url }}"
 
 {% if path_params_type %}
-parse_params, dump_params = underscored(Params)
+parse_params, dump_params = underscored ^ Params
 {% endif %}
 
 {% if query_params_type %}
-parse_query, dump_query = {{ query_style.value }}(Query)
+parse_query, dump_query = {{ query_style.value }} & {{ query_overrides }} ^ Query
 {% endif %}
 
 {% if headers_type %}
-parse_headers, dump_headers = dasherized(Headers)
+parse_headers, dump_headers = dasherized ^ Headers
 {% endif %}
 
 {% if request_type %}
-parse_request, dump_request = {{ request_style.value }}(Request)
+parse_request, dump_request = {{ request_style.value }} & {{ request_overrides }} ^ Request
 {% endif %}
 
 {% if response_type %}
-parse_response, dump_response = {{ request_style.value }}(Response)
+parse_response, dump_response = {{ request_style.value }} & {{ response_overrides }} ^ Response
 {% endif %}
 
 def call(

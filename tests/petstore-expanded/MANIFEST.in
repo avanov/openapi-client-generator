@@ -1,0 +1,7 @@
+# https://docs.python.org/3/distutils/sourcedist.html#manifest
+include README.md CHANGES LICENSE
+recursive-include requirements *.txt
+recursive-include petstore_expanded
+recursive-include petstore_expanded py.typed
+exclude requirements/test.txt
+prune tests

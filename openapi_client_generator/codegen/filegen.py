@@ -37,6 +37,9 @@ class EndpointContext(NamedTuple):
     request_style: AttrStyle
     query_style: AttrStyle
     response_is_stream: bool
+    request_overrides: str
+    response_overrides: str
+    query_overrides: str
 
 
 class ServiceContext(NamedTuple):
@@ -150,7 +153,11 @@ def endpoints_bindings(
                 response_type='\n\n'.join(render_type_context(x) for x in method.response_types),
                 request_style=request_style,
                 query_style=query_style,
-                response_is_stream=method.response_is_stream
+                response_is_stream=method.response_is_stream,
+
+                request_overrides='{}',
+                response_overrides='{}',
+                query_overrides='{}',
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
             # make sure there's `__init__.py` in every sub-package
