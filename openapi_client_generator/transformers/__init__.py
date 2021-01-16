@@ -90,6 +90,9 @@ class TypeContext(NamedTuple):
     """ if a type is a reference to a common (shared) type, it will be imported from a common domain
     and referenced as this name
     """
+    overrides: PMap[str, str] = pmap()
+    """ Attribute name overrides between Python and JSON
+    """
     @property
     def ordered_attrs(self) -> Sequence[TypeAttr]:
         return sorted(self.attrs, key=lambda x: (x.is_required, x.name), reverse=True)
@@ -644,12 +647,8 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
         return default, final_types.append(default)
 
     rv = default
+    overrides = default.overrides
     for param in params:
-        if param.required:
-            default_value: Optional[str] = None
-        else:
-            default_value = 'None'
-
         actual_type_name, default_value, resolved_types = recursive_resolve_schema(
             registry={},
             suggested_type_name=name_normalizer(f'{default.name}_{param.name}'),
@@ -663,13 +662,16 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
             default_value=default_value,
         )
 
-        # TODO: propagate overrides
-        normalized_name = normalize_name(name_normalizer(param.name))
+        # Checking for required attribute name overrides
+        case_normalized = name_normalizer(param.name)
+        valid_python_normalized = normalize_name(case_normalized)
+        if case_normalized != valid_python_normalized:
+            overrides = overrides.set(f'{rv.name}.{valid_python_normalized}', param.name)
 
         rv = rv._replace(
             attrs=rv.attrs.append(
                 TypeAttr(
-                    name=normalized_name,
+                    name=valid_python_normalized,
                     datatype=datatype.name,
                     docstring=datatype.docstring,
                     is_required=param.required,
@@ -677,6 +679,7 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
                 )
             )
         )
+    rv = rv._replace(overrides=overrides)
     final_types = final_types.append(rv)
     return rv, final_types
 

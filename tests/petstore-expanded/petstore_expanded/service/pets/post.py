@@ -37,11 +37,11 @@ URL = "pets"
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-request_overrides: Mapping[str, Any] = {}
+request_overrides: AttrOverrides = {}
 parse_request, dump_request = camelized & request_overrides ^ Request
 
 
-response_overrides: Mapping[str, Any] = {}
+response_overrides: AttrOverrides = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
 
 

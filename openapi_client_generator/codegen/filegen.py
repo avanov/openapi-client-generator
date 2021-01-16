@@ -9,6 +9,8 @@ from pkg_resources import get_distribution
 from inflection import underscore
 import openapi_type as oas
 import black
+from pyrsistent import pmap
+from pyrsistent.typing import PMap
 
 from . import templates
 from ..info import DISTRIBUTION_NAME, PACKAGE_NAME
@@ -143,6 +145,9 @@ def endpoints_bindings(
     for pth, item in meta.paths.items():
         for method in item.supported_methods:
             target = endpoints_root / pth.as_fs_path() / f'{method.name}.py'
+            query_types_overrides: PMap[str, str] = pmap()
+            for qt in method.query_types:
+                query_types_overrides = query_types_overrides.update(qt.overrides)
             ctx = EndpointContext(
                 package_name=package_name,
                 endpoint_url=pth.as_endpoint_url(),
@@ -155,9 +160,15 @@ def endpoints_bindings(
                 query_style=query_style,
                 response_is_stream=method.response_is_stream,
 
-                request_overrides=templates.OVERRIDES.render({}).strip(),
-                response_overrides=templates.OVERRIDES.render({}).strip(),
-                query_overrides=templates.OVERRIDES.render({}).strip(),
+                request_overrides=templates.OVERRIDES.render({
+                    'overrides': {}
+                }).strip(),
+                response_overrides=templates.OVERRIDES.render({
+                    'overrides': {}
+                }).strip(),
+                query_overrides=templates.OVERRIDES.render({
+                    'overrides': query_types_overrides
+                }).strip(),
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
             # make sure there's `__init__.py` in every sub-package

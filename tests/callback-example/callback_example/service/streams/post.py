@@ -41,14 +41,14 @@ METHOD = http.Method(__name__.split(".")[-1])
 URL = "streams"
 
 
-query_overrides: Mapping[str, Any] = {}
+query_overrides: AttrOverrides = {}
 parse_query, dump_query = dasherized & query_overrides ^ Query
 
 
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-response_overrides: Mapping[str, Any] = {}
+response_overrides: AttrOverrides = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
 
 

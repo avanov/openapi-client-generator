@@ -51,18 +51,18 @@ URL = "pet/{pet_id}/uploadImage"
 parse_params, dump_params = underscored ^ Params
 
 
-query_overrides: Mapping[str, Any] = {}
+query_overrides: AttrOverrides = {}
 parse_query, dump_query = dasherized & query_overrides ^ Query
 
 
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-request_overrides: Mapping[str, Any] = {}
+request_overrides: AttrOverrides = {}
 parse_request, dump_request = camelized & request_overrides ^ Request
 
 
-response_overrides: Mapping[str, Any] = {}
+response_overrides: AttrOverrides = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
 
 
