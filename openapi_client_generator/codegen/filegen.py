@@ -155,9 +155,9 @@ def endpoints_bindings(
                 query_style=query_style,
                 response_is_stream=method.response_is_stream,
 
-                request_overrides='{}',
-                response_overrides='{}',
-                query_overrides='{}',
+                request_overrides=templates.OVERRIDES.render({}).strip(),
+                response_overrides=templates.OVERRIDES.render({}).strip(),
+                query_overrides=templates.OVERRIDES.render({}).strip(),
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
             # make sure there's `__init__.py` in every sub-package

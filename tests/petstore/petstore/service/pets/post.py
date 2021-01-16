@@ -34,7 +34,8 @@ URL = "pets"
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-parse_response, dump_response = camelized & {} ^ Response
+response_overrides = {}
+parse_response, dump_response = camelized & response_overrides ^ Response
 
 
 def call(

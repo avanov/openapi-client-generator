@@ -37,10 +37,12 @@ URL = "user/createWithList"
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-parse_request, dump_request = camelized & {} ^ Request
+request_overrides = {}
+parse_request, dump_request = camelized & request_overrides ^ Request
 
 
-parse_response, dump_response = camelized & {} ^ Response
+response_overrides = {}
+parse_response, dump_response = camelized & response_overrides ^ Response
 
 
 def call(

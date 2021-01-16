@@ -38,13 +38,15 @@ METHOD = http.Method(__name__.split(".")[-1])
 URL = "pets"
 
 
-parse_query, dump_query = dasherized & {} ^ Query
+query_overrides = {}
+parse_query, dump_query = dasherized & query_overrides ^ Query
 
 
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-parse_response, dump_response = camelized & {} ^ Response
+response_overrides = {}
+parse_response, dump_response = camelized & response_overrides ^ Response
 
 
 def call(
