@@ -22,6 +22,35 @@
 OpenAPI Client Generator
 ========================
 
+This CLI utility allows you to generate Python client packages from OpenAPI v3 specifications.
+The project aims at supporting any generic valid specification.
+
+You can install it from PyPI:
+
+.. code-block:: bash
+
+    pip install openapi-client-generator
+
+Afterwards, use a CLI utility called ``openapi-client-generator``:
+
+.. code-block:: bash
+
+    $ openapi-client-generator --help
+    usage: openapi-client-generator [-h] [-V] {gen} ...
+
+    OpenAPI Client Generator
+
+    optional arguments:
+      -h, --help     show this help message and exit
+      -V, --version  show program's version number and exit
+
+    sub-commands:
+      valid sub-commands
+
+      {gen}          additional help
+        gen          Generate client for a provided schema (JSON, YAML).
+
+
 Cloning this repo
 -----------------
 
