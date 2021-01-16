@@ -38,15 +38,18 @@ METHOD = http.Method(__name__.split(".")[-1])
 URL = "pet/findByTags"
 
 
-query_overrides = {}
+query_overrides: Mapping[str, Any] = {}
 parse_query, dump_query = dasherized & query_overrides ^ Query
 
 
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-response_overrides = {}
+response_overrides: Mapping[str, Any] = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
+
+
+IS_STREAMING_RESPONSE = False
 
 
 def call(
@@ -62,6 +65,6 @@ def call(
         url=url,
         headers=dump_headers(headers),
         query=dump_query(query),
-        is_stream=False,
+        is_stream=IS_STREAMING_RESPONSE,
     )
     return parse_response(resp.json())

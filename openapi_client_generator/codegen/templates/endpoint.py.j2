@@ -11,7 +11,7 @@ from {{ package_name }}.common.types import *
 __all__ = (
     'call',
     {% if path_params_type %}'Params',{% endif -%}
-    {% if query_params_type %}'Query',{% endif -%}
+    {% if query_type %}'Query',{% endif -%}
     {% if request_type %}'Request',{% endif -%}
     {% if response_type %}'Response',{% endif -%}
 )
@@ -19,7 +19,7 @@ __all__ = (
 
 {{ path_params_type }}
 
-{{ query_params_type }}
+{{ query_type }}
 
 {{ request_type }}
 
@@ -35,8 +35,8 @@ URL = "{{ endpoint_url }}"
 parse_params, dump_params = underscored ^ Params
 {% endif %}
 
-{% if query_params_type %}
-query_overrides = {{ query_overrides }}
+{% if query_type %}
+query_overrides: Mapping[str, Any] = {{ query_overrides }}
 parse_query, dump_query = {{ query_style.value }} & query_overrides ^ Query
 {% endif %}
 
@@ -45,20 +45,22 @@ parse_headers, dump_headers = dasherized ^ Headers
 {% endif %}
 
 {% if request_type %}
-request_overrides = {{ request_overrides }}
+request_overrides: Mapping[str, Any] = {{ request_overrides }}
 parse_request, dump_request = {{ request_style.value }} & request_overrides ^ Request
 {% endif %}
 
 {% if response_type %}
-response_overrides = {{ response_overrides }}
+response_overrides: Mapping[str, Any] = {{ response_overrides }}
 parse_response, dump_response = {{ request_style.value }} & response_overrides ^ Response
 {% endif %}
+
+IS_STREAMING_RESPONSE = {{ response_is_stream }}
 
 def call(
     client: http.Client,
     {% if request_type %}request: Request,{% endif %}
     {% if path_params_type %}params: Params,{% endif %}
-    {% if query_params_type %}query: Query,{% endif %}
+    {% if query_type %}query: Query,{% endif %}
     {% if headers_type %}headers: Headers,{% endif %}
 ) -> {% if response_type %}Response{% else %}None{% endif %}:
     {% if path_params_type %}
@@ -71,8 +73,8 @@ def call(
         method=METHOD,
         url=url,
         {% if headers_type %}headers=dump_headers(headers),{% endif %}
-        {% if query_params_type %}query=dump_query(query),{% endif %}
+        {% if query_type %}query=dump_query(query),{% endif %}
         {% if request_type %}payload=dump_request(request),{% endif %}
-        is_stream={{ response_is_stream }},
+        is_stream=IS_STREAMING_RESPONSE,
     )
     return parse_response(resp.json())

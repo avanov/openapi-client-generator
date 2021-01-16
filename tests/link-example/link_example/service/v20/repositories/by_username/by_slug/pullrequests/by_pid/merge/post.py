@@ -48,8 +48,11 @@ parse_params, dump_params = underscored ^ Params
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-response_overrides = {}
+response_overrides: Mapping[str, Any] = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
+
+
+IS_STREAMING_RESPONSE = False
 
 
 def call(
@@ -64,6 +67,6 @@ def call(
         method=METHOD,
         url=url,
         headers=dump_headers(headers),
-        is_stream=False,
+        is_stream=IS_STREAMING_RESPONSE,
     )
     return parse_response(resp.json())

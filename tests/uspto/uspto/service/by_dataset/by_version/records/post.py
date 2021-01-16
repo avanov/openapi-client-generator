@@ -19,9 +19,9 @@ __all__ = (
 class Params(NamedTuple):
     """Parameters for the endpoint path placeholders"""
 
-    version: str
+    version: str = "v1"
 
-    dataset: str
+    dataset: str = "oa_citations"
 
 
 class Request(NamedTuple):
@@ -57,12 +57,15 @@ parse_params, dump_params = underscored ^ Params
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-request_overrides = {}
+request_overrides: Mapping[str, Any] = {}
 parse_request, dump_request = camelized & request_overrides ^ Request
 
 
-response_overrides = {}
+response_overrides: Mapping[str, Any] = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
+
+
+IS_STREAMING_RESPONSE = False
 
 
 def call(
@@ -79,6 +82,6 @@ def call(
         url=url,
         headers=dump_headers(headers),
         payload=dump_request(request),
-        is_stream=False,
+        is_stream=IS_STREAMING_RESPONSE,
     )
     return parse_response(resp.json())

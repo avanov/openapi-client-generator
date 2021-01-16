@@ -30,7 +30,7 @@ class EndpointContext(NamedTuple):
     package_name: str
     endpoint_url: str
     path_params_type: str
-    query_params_type: str
+    query_type: str
     request_type: str
     response_type: str
     headers_type: str
@@ -148,7 +148,7 @@ def endpoints_bindings(
                 endpoint_url=pth.as_endpoint_url(),
                 path_params_type=render_type_context(method.path_params_type),
                 headers_type=render_type_context(method.headers_type),
-                query_params_type=render_type_context(method.query_params_type),
+                query_type='\n\n'.join(render_type_context(x) for x in method.query_types),
                 request_type='\n\n'.join(render_type_context(x) for x in method.request_types),
                 response_type='\n\n'.join(render_type_context(x) for x in method.response_types),
                 request_style=request_style,
