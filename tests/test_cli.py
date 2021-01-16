@@ -1,3 +1,6 @@
+""" These tests exist mostly for providing coverage report, as the same CLI functionality
+is already tested outside pytest with `make example-clients`
+"""
 import io
 import pytest
 import tempfile as tf

@@ -30,13 +30,16 @@ class EndpointContext(NamedTuple):
     package_name: str
     endpoint_url: str
     path_params_type: str
-    query_params_type: str
+    query_type: str
     request_type: str
     response_type: str
     headers_type: str
     request_style: AttrStyle
     query_style: AttrStyle
     response_is_stream: bool
+    request_overrides: str
+    response_overrides: str
+    query_overrides: str
 
 
 class ServiceContext(NamedTuple):
@@ -145,12 +148,16 @@ def endpoints_bindings(
                 endpoint_url=pth.as_endpoint_url(),
                 path_params_type=render_type_context(method.path_params_type),
                 headers_type=render_type_context(method.headers_type),
-                query_params_type=render_type_context(method.query_params_type),
+                query_type='\n\n'.join(render_type_context(x) for x in method.query_types),
                 request_type='\n\n'.join(render_type_context(x) for x in method.request_types),
                 response_type='\n\n'.join(render_type_context(x) for x in method.response_types),
                 request_style=request_style,
                 query_style=query_style,
-                response_is_stream=method.response_is_stream
+                response_is_stream=method.response_is_stream,
+
+                request_overrides=templates.OVERRIDES.render({}).strip(),
+                response_overrides=templates.OVERRIDES.render({}).strip(),
+                query_overrides=templates.OVERRIDES.render({}).strip(),
             )
             endpoints[Binding(target, templates.ENDPOINT, ctx)] = method
             # make sure there's `__init__.py` in every sub-package

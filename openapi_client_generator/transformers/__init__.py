@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from string import digits
 from functools import reduce
-from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any
+from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any, Tuple
 
 from typeit.utils import normalize_name
 import openapi_type as oas
@@ -126,7 +126,7 @@ class EndpointMethod(NamedTuple):
     method:             oas.Operation
     params:             Params
     path_params_type:   TypeContext = DEFAULT_PATH_PARAMS_TYPE
-    query_params_type:  TypeContext = DEFAULT_QUERY_PARAMS_TYPE
+    query_types:        Sequence[TypeContext] = pvector([DEFAULT_QUERY_PARAMS_TYPE])
     request_types:      Sequence[TypeContext] = pvector([DEFAULT_REQUEST_TYPE])
     response_types:     Sequence[TypeContext] = pvector([DEFAULT_RESPONSE_TYPE])
     headers_type:       TypeContext = DEFAULT_HEADERS_TYPE
@@ -226,7 +226,7 @@ def recursive_resolve_schema(
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
         if schema.enum:
-            actual_type_name = suggested_type_name
+            actual_type_name = camelize(suggested_type_name)
             enum_options = pvector(
                 TypeAttr(
                     name=underscore(PYTHONIC.sub('_', x)).upper(),
@@ -244,12 +244,21 @@ def recursive_resolve_schema(
                     is_enum=True
                 )
             )
+            if schema.default is None:
+                default_value = None
+            else:
+                # construct enum value from the provided default string
+                default_value = f"{actual_type_name}('{schema.default}')"
         else:
             actual_type_name = 'str'
+            if schema.default is None:
+                default_value = None
+            else:
+                default_value = f"'{schema.default}'"
         return Parsed(
             actual_type_name=actual_type_name,
             final_types=final_types,
-            default_value=f"'{schema.default}'" if schema.default is not None else None
+            default_value=default_value
         )
 
     elif isinstance(schema, oas.IntegerValue):
@@ -601,22 +610,22 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
         else:
             response_types = pvector([DEFAULT_RESPONSE_TYPE])
 
-        query_params_type = infer_params_type(
+        query_type, query_types = infer_params_type(
             params.query_params,
             name_normalizer=underscore,
             default=DEFAULT_QUERY_PARAMS_TYPE
         )
-        path_params_type  = infer_params_type(params.path_params)
-        header_type       = infer_params_type(params.header_params,
-                                              name_normalizer=lambda x: underscore(x.lower()),
-                                              default=DEFAULT_HEADERS_TYPE)
+        path_params_type, _types  = infer_params_type(params.path_params)
+        header_type, _types       = infer_params_type(params.header_params,
+                                                      name_normalizer=lambda x: underscore(x.lower()),
+                                                      default=DEFAULT_HEADERS_TYPE)
 
         yield EndpointMethod(
             name=name,
             method=method,
             params=params,
             path_params_type=path_params_type,
-            query_params_type=query_params_type,
+            query_types=query_types,
             request_types=request_types,
             response_types=response_types,
             headers_type=header_type,
@@ -626,9 +635,10 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
 
 def infer_params_type(params: Sequence[oas.OperationParameter],
                       name_normalizer: Callable[[str], str] = lambda x: x,
-                      default: TypeContext = DEFAULT_PATH_PARAMS_TYPE) -> TypeContext:
+                      default: TypeContext = DEFAULT_PATH_PARAMS_TYPE) -> Tuple[TypeContext, PVector[TypeContext]]:
+    final_types: PVector[TypeContext] = pvector()
     if not params:
-        return default
+        return default, final_types.append(default)
 
     rv = default
     for param in params:
@@ -637,16 +647,17 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
         else:
             default_value = 'None'
 
-        param_rv = recursive_resolve_schema(
+        actual_type_name, default_value, resolved_types = recursive_resolve_schema(
             registry={},
-            suggested_type_name=name_normalizer(param.name),
+            suggested_type_name=name_normalizer(f'{default.name}_{param.name}'),
             schema=param.schema,
             attr_name_normalizer=name_normalizer,
             common_types=pmap()
         )
+        final_types = final_types.extend(resolved_types)
         datatype = TypeDescr(
-            name=param_rv.actual_type_name,
-            default_value=param_rv.default_value,
+            name=actual_type_name,
+            default_value=default_value,
         )
 
         # TODO: propagate overrides
@@ -663,7 +674,8 @@ def infer_params_type(params: Sequence[oas.OperationParameter],
                 )
             )
         )
-    return rv
+    final_types = final_types.append(rv)
+    return rv, final_types
 
 
 def python_type_from_openapi_schema(schema: oas.SchemaType) -> TypeDescr:

@@ -13,5 +13,5 @@ SPECS = [
         'uspto',
     ]
 ] + [
-    (x, TESTS_ROOT / f'{x}.json') for x in ['example-client-spec']
+    (x, TESTS_ROOT / f'{x}.json') for x in ['petstore-full']
 ]
