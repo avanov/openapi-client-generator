@@ -12,5 +12,11 @@ pip install api-with-examples
 ## Client instantiation example
 
 ```python
+import api_with_examples
 
+client = api_with_examples.common.http.Client(service_url="https://openapi-service-url/")
+response = api_with_examples.service.<path.to.endpoint>.<method>.call(
+    client,
+    <params, headers, payloads>
+)
 ```

@@ -50,6 +50,7 @@ class ServiceContext(NamedTuple):
 
 class ReadmeContext(NamedTuple):
     client_name: str
+    package_name: str
 
 
 class ManifestContext(NamedTuple):
@@ -123,7 +124,10 @@ def get_project_layout(
         common_types=meta.common_types,
         endpoints_root=endpoints_root,
         readme=Binding(
-            root / README, templates.README, ReadmeContext(client_name=name,)
+            root / README, templates.README, ReadmeContext(
+                client_name=name,
+                package_name=py_name,
+            )
         ),
         manifest=Binding(root / MANIFEST, templates.MANIFEST, ManifestContext(package_name=py_name)),
         setup_py=Binding(root / SETUP_PY, templates.SETUP_PY, SetupContext(client_name=name)),
