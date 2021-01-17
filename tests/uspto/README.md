@@ -12,5 +12,11 @@ pip install uspto
 ## Client instantiation example
 
 ```python
+import uspto
 
+client = uspto.common.http.Client(service_url="https://openapi-service-url/")
+response = uspto.service.<path.to.endpoint>.<method>.call(
+    client,
+    <params, headers, payloads>
+)
 ```

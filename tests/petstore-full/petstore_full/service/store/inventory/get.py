@@ -34,7 +34,7 @@ URL = "store/inventory"
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-response_overrides: Mapping[str, Any] = {}
+response_overrides: AttrOverrides = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
 
 

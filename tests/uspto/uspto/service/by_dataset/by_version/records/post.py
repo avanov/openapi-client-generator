@@ -29,9 +29,9 @@ class Request(NamedTuple):
 
     criteria: str = "*:*"
 
-    start: Optional[int] = 0
+    start: int = 0
 
-    rows: Optional[int] = 100
+    rows: int = 100
 
 
 Response = Sequence[Mapping[Any, Any]]
@@ -57,11 +57,11 @@ parse_params, dump_params = underscored ^ Params
 parse_headers, dump_headers = dasherized ^ Headers
 
 
-request_overrides: Mapping[str, Any] = {}
+request_overrides: AttrOverrides = {}
 parse_request, dump_request = camelized & request_overrides ^ Request
 
 
-response_overrides: Mapping[str, Any] = {}
+response_overrides: AttrOverrides = {}
 parse_response, dump_response = camelized & response_overrides ^ Response
 
 

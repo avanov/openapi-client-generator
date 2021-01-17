@@ -1,3 +1,5 @@
 {
-
+    {% for py_attr, json_attr in overrides.items() %}
+    {{ py_attr }}: '{{ json_attr }}',
+    {% endfor %}
 }

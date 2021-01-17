@@ -12,5 +12,11 @@ pip install callback-example
 ## Client instantiation example
 
 ```python
+import callback_example
 
+client = callback_example.common.http.Client(service_url="https://openapi-service-url/")
+response = callback_example.service.<path.to.endpoint>.<method>.call(
+    client,
+    <params, headers, payloads>
+)
 ```

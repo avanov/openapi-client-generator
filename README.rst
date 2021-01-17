@@ -25,6 +25,8 @@ OpenAPI Client Generator
 This CLI utility allows you to generate Python client packages from OpenAPI v3 specifications.
 The project aims at supporting any generic valid specification.
 
+Works on Python 3.8 and above.
+
 You can install it from PyPI:
 
 .. code-block:: bash

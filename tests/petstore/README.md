@@ -12,5 +12,11 @@ pip install petstore
 ## Client instantiation example
 
 ```python
+import petstore
 
+client = petstore.common.http.Client(service_url="https://openapi-service-url/")
+response = petstore.service.<path.to.endpoint>.<method>.call(
+    client,
+    <params, headers, payloads>
+)
 ```

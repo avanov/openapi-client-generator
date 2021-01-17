@@ -12,5 +12,11 @@ pip install {{ client_name }}
 ## Client instantiation example
 
 ```python
+import {{ package_name }}
 
+client = {{ package_name }}.common.http.Client(service_url="https://openapi-service-url/")
+response = {{ package_name }}.service.<path.to.endpoint>.<method>.call(
+    client,
+    <params, headers, payloads>
+)
 ```
