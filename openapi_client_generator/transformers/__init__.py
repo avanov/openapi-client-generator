@@ -135,7 +135,7 @@ class EndpointMethod(NamedTuple):
     query_types:        Sequence[TypeContext] = pvector([DEFAULT_QUERY_PARAMS_TYPE])
     request_types:      Sequence[TypeContext] = pvector([DEFAULT_REQUEST_TYPE])
     response_types:     Sequence[TypeContext] = pvector([DEFAULT_RESPONSE_TYPE])
-    headers_type:       TypeContext = DEFAULT_HEADERS_TYPE
+    headers_types:      Sequence[TypeContext] = pvector([DEFAULT_HEADERS_TYPE])
     response_is_stream: bool = False
 
 
@@ -621,10 +621,10 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
             name_normalizer=underscore,
             default=DEFAULT_QUERY_PARAMS_TYPE
         )
-        path_params_type, _types  = infer_params_type(params.path_params)
-        header_type, _types       = infer_params_type(params.header_params,
-                                                      name_normalizer=lambda x: underscore(x.lower()),
-                                                      default=DEFAULT_HEADERS_TYPE)
+        path_params_type, _types    = infer_params_type(params.path_params)
+        headers_type, headers_types = infer_params_type(params.header_params,
+                                                        name_normalizer=lambda x: underscore(x.lower()),
+                                                        default=DEFAULT_HEADERS_TYPE)
 
         yield EndpointMethod(
             name=name,
@@ -634,7 +634,7 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
             query_types=query_types,
             request_types=request_types,
             response_types=response_types,
-            headers_type=header_type,
+            headers_types=headers_types,
             response_is_stream=response_is_stream
         )
 

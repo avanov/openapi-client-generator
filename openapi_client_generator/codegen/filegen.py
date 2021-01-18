@@ -156,7 +156,7 @@ def endpoints_bindings(
                 package_name=package_name,
                 endpoint_url=pth.as_endpoint_url(),
                 path_params_type=render_type_context(method.path_params_type),
-                headers_type=render_type_context(method.headers_type),
+                headers_type='\n\n'.join(render_type_context(x) for x in method.headers_types),
                 query_type='\n\n'.join(render_type_context(x) for x in method.query_types),
                 request_type='\n\n'.join(render_type_context(x) for x in method.request_types),
                 response_type='\n\n'.join(render_type_context(x) for x in method.response_types),
