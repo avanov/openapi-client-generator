@@ -72,8 +72,8 @@ def call(
     resp = client.make_call(
         method=METHOD,
         url=url,
-        {% if headers_type %}headers=dump_headers(headers),{% endif %}
-        {% if query_type %}query=dump_query(query),{% endif %}
+        {% if headers_type %}headers=http.only_provided_values(dump_headers(headers).items()),{% endif %}
+        {% if query_type %}query=http.only_provided_values(dump_query(query).items()),{% endif %}
         {% if request_type %}payload=dump_request(request),{% endif %}
         is_stream=IS_STREAMING_RESPONSE,
     )

@@ -19,3 +19,4 @@ dasherized = TypeConstructor & flags.GlobalNameOverride(inflection.dasherize)
 underscored = TypeConstructor
 
 AttrOverrides = Mapping[Union[property, Tuple[Type, str]], str]
+

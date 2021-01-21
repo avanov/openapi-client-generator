@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Mapping, NamedTuple, TypeVar, Optional, Type, Any
+from typing import Mapping, NamedTuple, TypeVar, Optional, Type, Any, Iterable, Tuple
 from typing import Protocol
 
 import requests
@@ -75,3 +75,10 @@ class Client(NamedTuple):
         ).prepare()
 
         return http.send(req, stream=is_stream, timeout=self.request_timeout)
+
+
+NonNullableItems = Iterable[Tuple[str, Any]]
+
+
+def only_provided_values(xs: NonNullableItems) -> Mapping[str, Any]:
+    return {k: v for k, v in xs if v is not None}
