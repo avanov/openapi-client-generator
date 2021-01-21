@@ -82,8 +82,8 @@ def call(
     resp = client.make_call(
         method=METHOD,
         url=url,
-        headers=dump_headers(headers),
-        query=dump_query(query),
+        headers=http.only_provided_values(dump_headers(headers).items()),
+        query=http.only_provided_values(dump_query(query).items()),
         is_stream=IS_STREAMING_RESPONSE,
     )
     return parse_response(resp.json())

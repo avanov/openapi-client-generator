@@ -59,7 +59,7 @@ def call(
     resp = client.make_call(
         method=METHOD,
         url=url,
-        headers=dump_headers(headers),
+        headers=http.only_provided_values(dump_headers(headers).items()),
         payload=dump_request(request),
         is_stream=IS_STREAMING_RESPONSE,
     )
