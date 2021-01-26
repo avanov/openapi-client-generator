@@ -96,7 +96,17 @@ class Stream(NamedTuple):
     """ response stream that needs to be closed regardless stream consumption
     strategy
     """
+    def bytes(self, chunk_size: int) -> Generator[bytes, None, None]:
+        """ iterate over bytes of size ``chunk_size`` coming to the receiving socket
+        """
+        # enter the context as we need to close the stream upon exhaustion or GC
+        with self.response:
+            for chunk in self.response.iter_content(chunk_size=chunk_size):
+                yield chunk
+
     def byte_lines(self) -> Generator[bytes, None, None]:
+        """ iterate over byte lines
+        """
         # enter the context as we need to close the stream upon exhaustion or GC
         with self.response:
             for line in self.response.iter_lines():
@@ -105,13 +115,19 @@ class Stream(NamedTuple):
                     yield line
 
     def text_lines(self) -> Generator[bytes, None, None]:
+        """ iterate over textual lines
+        """
         for line in self.byte_lines():
             yield line.decode('utf-8')
 
-    def map_bytes(self, f: Callable[[bytes], T]) -> Generator[T, None, None]:
+    def map_byte_chunks(self, f: Callable[[bytes], T], chunk_size: int) -> Generator[T, None, None]:
+        for chunk in self.bytes(chunk_size=chunk_size):
+            yield f(chunk)
+
+    def map_byte_lines(self, f: Callable[[bytes], T]) -> Generator[T, None, None]:
         for line in self.byte_lines():
             yield f(line)
 
-    def map_text(self, f: Callable[[str], T]) -> Generator[T, None, None]:
+    def map_text_lines(self, f: Callable[[str], T]) -> Generator[T, None, None]:
         for line in self.text_lines():
             yield f(line)
