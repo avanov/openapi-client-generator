@@ -84,4 +84,5 @@ def call(
         payload=dump_request(request),
         is_stream=IS_STREAMING_RESPONSE,
     )
+
     return parse_response(resp.json())

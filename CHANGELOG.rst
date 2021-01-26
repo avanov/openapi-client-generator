@@ -2,6 +2,11 @@
 CHANGELOG
 =========
 
+1.0.7
+=====
+
+* Add streaming interface
+
 1.0.0
 =====
 

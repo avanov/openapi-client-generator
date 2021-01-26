@@ -67,4 +67,5 @@ def call(
         query=http.only_provided_values(dump_query(query).items()),
         is_stream=IS_STREAMING_RESPONSE,
     )
+
     return parse_response(resp.json())

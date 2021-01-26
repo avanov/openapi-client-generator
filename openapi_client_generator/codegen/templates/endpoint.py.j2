@@ -62,7 +62,7 @@ def call(
     {% if path_params_type %}params: Params,{% endif %}
     {% if query_type %}query: Query,{% endif %}
     {% if headers_type %}headers: Headers,{% endif %}
-) -> {% if response_type %}Response{% else %}None{% endif %}:
+) -> {% if response_type %}{% if response_is_stream %}http.Stream{% else %}Response{% endif %}{% else %}None{% endif %}:
     {% if path_params_type %}
     url = URL.format(**dump_params(params))
     {% else %}
@@ -77,4 +77,8 @@ def call(
         {% if request_type %}payload=dump_request(request),{% endif %}
         is_stream=IS_STREAMING_RESPONSE,
     )
+    {% if response_is_stream %}
+    return http.Stream(resp)
+    {% else %}
     return parse_response(resp.json())
+    {% endif %}

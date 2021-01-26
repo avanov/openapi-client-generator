@@ -69,4 +69,5 @@ def call(
         headers=http.only_provided_values(dump_headers(headers).items()),
         is_stream=IS_STREAMING_RESPONSE,
     )
+
     return parse_response(resp.json())
