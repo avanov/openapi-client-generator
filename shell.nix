@@ -57,7 +57,6 @@ pkgs.stdenv.mkDerivation {
             $VENV_DIR/bin/python -m pip install -e $PWD
             $VENV_DIR/bin/python -m pip install -r $PWD/requirements/test.txt
             $VENV_DIR/bin/python -m pip install -r $PWD/requirements/extras/*
-            $VENV_DIR/bin/python -m pip install -e $PWD/tests/example_client
         fi
     '';
 }
