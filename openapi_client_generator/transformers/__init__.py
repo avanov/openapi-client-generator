@@ -369,17 +369,19 @@ def recursive_resolve_schema(
         )
 
     elif isinstance(schema, oas.ObjectWithAdditionalProperties):
-        if schema.additional_properties is None:
+        if schema.additional_properties in (None, True):
             return Parsed(
                 actual_type_name='Mapping[Any, Any]',
                 default_value=None,
                 final_types=final_types
             )
+        elif schema.additional_properties is False:
+            raise NotImplementedError('Not sure what to do with "additionalProperties: false"')
         else:
             return recursive_resolve_schema(
                 registry=registry,
                 suggested_type_name=suggested_type_name,
-                schema=schema.additional_properties,
+                schema=schema.additional_properties,  # type: ignore
                 attr_name_normalizer=attr_name_normalizer,
                 common_types=common_types,
             )
