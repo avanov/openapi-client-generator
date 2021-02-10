@@ -1,6 +1,6 @@
 {% if attrs or common_reference_as  %}
 {% if common_reference_as %}
-{{ common_reference_as }} = {% if name == 'None' %}Type[{{ name }}]{% else %}{{ name }}{% endif %}
+{{ common_reference_render }}
 {% else %}
 {% if is_enum %}
 class {{ name }}(Enum):

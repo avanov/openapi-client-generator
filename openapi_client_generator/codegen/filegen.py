@@ -233,7 +233,7 @@ def _add_common_types(common_root: Path, common_types: ResolvedTypesVec) -> None
 
 
 def render_type_context(t: TypeContext) -> str:
-    return templates.DATA_TYPE.render({x: getattr(t, x) for x in chain(t._fields, ['ordered_attrs'])}).strip()
+    return templates.DATA_TYPE.render({x: getattr(t, x) for x in chain(t._fields, ['ordered_attrs', 'common_reference_render'])}).strip()
 
 
 def _mark_as_typed(dir: Path) -> None:

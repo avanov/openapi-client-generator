@@ -97,6 +97,21 @@ class TypeContext(NamedTuple):
     def ordered_attrs(self) -> Sequence[TypeAttr]:
         return sorted(self.attrs, key=lambda x: (x.is_required, x.name), reverse=True)
 
+    @property
+    def common_reference_render(self) -> str:
+        if not self.common_reference_as:
+            return ''
+
+        if self.name == 'None':
+            name_repr = 'Type[None]'
+        else:
+            name_repr = self.name
+        if self.common_reference_as.startswith('Union[') or ' | ' in self.common_reference_as:
+            rv = f'{name_repr} = {self.common_reference_as}'
+        else:
+            rv = f'{self.common_reference_as} = {name_repr}'
+        return rv
+
 
 DEFAULT_QUERY_PARAMS_TYPE = TypeContext(name='Query', docstring='Parameters for the endpoint query string')
 DEFAULT_PATH_PARAMS_TYPE  = TypeContext(name='Params', docstring='Parameters for the endpoint path placeholders')
@@ -473,11 +488,11 @@ def _process_reference(
             common_types=common_types
         )
         final_types = final_types.extend(resolved_types)
-    return Parsed(
-        actual_type_name=actual_type_name,
-        default_value=default,
-        final_types=final_types
-    )
+        return Parsed(
+            actual_type_name=actual_type_name,
+            default_value=default,
+            final_types=final_types
+        )
 
 
 def _process_object(
