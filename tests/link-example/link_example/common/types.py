@@ -23,7 +23,7 @@ underscored = TypeConstructor
 AttrOverrides = Mapping[Union[property, Tuple[Type, str]], str]
 
 
-class user(NamedTuple):
+class User(NamedTuple):
     """"""
 
     uuid: Optional[str] = None
@@ -31,21 +31,21 @@ class user(NamedTuple):
     username: Optional[str] = None
 
 
-class repository(NamedTuple):
+class Repository(NamedTuple):
     """"""
 
     slug: Optional[str] = None
 
-    owner: Optional[user] = None
+    owner: Optional[User] = None
 
 
-class pullrequest(NamedTuple):
+class Pullrequest(NamedTuple):
     """"""
 
     title: Optional[str] = None
 
-    repository: Optional[repository] = None
+    repository: Optional[Repository] = None
 
     id: Optional[int] = None
 
-    author: Optional[user] = None
+    author: Optional[User] = None

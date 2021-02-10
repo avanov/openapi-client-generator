@@ -25,7 +25,15 @@ OpenAPI Client Generator
 This CLI utility allows you to generate Python client packages from OpenAPI v3 specifications.
 The project aims at supporting any generic valid specification.
 
-Works on Python 3.8 and above.
+Features
+--------
+
+* works on Python 3.8 and above;
+* generates clients with type hints to aid static analysis of higher level interfaces that would use the clients;
+* supports streaming endpoints.
+
+Installation
+------------
 
 You can install it from PyPI:
 
@@ -53,6 +61,9 @@ Afterwards, use a CLI utility called ``openapi-client-generator``:
         gen          Generate client for a provided schema (JSON, YAML).
 
 
+Contributing
+============
+
 Cloning this repo
 -----------------
 
@@ -69,11 +80,6 @@ The proper way to clone this repo is:
     # for logging submodule diff with `git diff`
     git config diff.submodule log
 
-Documentation
--------------
-
-Documentation is hosted on ReadTheDocs: https://openapi-client-generator.readthedocs.io/en/develop/
-
 
 Test framework
 --------------
@@ -87,7 +93,18 @@ You can run existing test suite with
    $ nix-shell --run "make test"
 
 
+Documentation
+-------------
+
+Documentation is hosted on ReadTheDocs: https://openapi-client-generator.readthedocs.io/en/develop/
+
+
 Changelog
 ---------
 
 See `CHANGELOG <https://github.com/avanov/openapi-client-generator/blob/master/CHANGELOG.rst>`_.
+
+LICENSE
+-------
+
+MIT

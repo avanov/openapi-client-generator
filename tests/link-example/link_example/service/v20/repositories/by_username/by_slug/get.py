@@ -23,7 +23,7 @@ class Params(NamedTuple):
     slug: str
 
 
-Response = repository
+Response = Repository
 
 
 class Headers(NamedTuple):

@@ -21,7 +21,7 @@ class Params(NamedTuple):
     username: str
 
 
-Response = user
+Response = User
 
 
 class Headers(NamedTuple):

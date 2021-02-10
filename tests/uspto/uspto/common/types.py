@@ -35,7 +35,7 @@ class DataSetListApi(NamedTuple):
     api_documentation_url: Optional[str] = None
 
 
-class dataSetList(NamedTuple):
+class DataSetList(NamedTuple):
     """"""
 
     total: Optional[int] = None

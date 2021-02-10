@@ -14,7 +14,7 @@ __all__ = (
 )
 
 
-Response = dataSetList
+Response = DataSetList
 
 
 class Headers(NamedTuple):

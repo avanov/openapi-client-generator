@@ -21,7 +21,7 @@ class Params(NamedTuple):
     username: str
 
 
-Response = Sequence[repository]
+Response = Sequence[Repository]
 
 
 class Headers(NamedTuple):

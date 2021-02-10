@@ -36,7 +36,7 @@ class Query(NamedTuple):
     state: Optional[QueryState] = None
 
 
-Response = Sequence[pullrequest]
+Response = Sequence[Pullrequest]
 
 
 class Headers(NamedTuple):

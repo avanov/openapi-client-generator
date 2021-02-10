@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from string import digits
 from functools import reduce
-from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any, Tuple
+from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any, Tuple, Union
 
 from typeit.utils import normalize_name
 import openapi_type as oas
@@ -165,53 +165,62 @@ class SpecMeta(NamedTuple):
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
-    common_types = resolve_schemas(spec.components.schemas, common_types=pmap())
-    common_types_ = pmap((x.name, x) for x in common_types)
+
+    common_schema_types = resolve_schemas(spec.components.schemas, common_schema_types=pmap())
+    common_schema_types = pvector(x._replace(name=camelized_python_name(x.name)) for x in common_schema_types)
+    common_schema_types_ = pmap((x.name, x) for x in common_schema_types)
 
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
         endpoint = Endpoint(
             path_item=item,
-            supported_methods=iter_supported_methods(common_types_, item)
+            supported_methods=iter_supported_methods(
+                common_types=common_schema_types_,
+                common_params=spec.components.parameters,
+                path=item
+            )
         )
         paths[pth] = endpoint
 
     return SpecMeta(
         spec=spec,
         paths=paths,
-        common_types=common_types
+        common_types=common_schema_types
     )
 
 
 def resolve_schemas(
     schemas: Mapping[str, oas.SchemaType],
-    common_types: ResolvedTypesMap
+    common_schema_types: ResolvedTypesMap
 ) -> ResolvedTypesVec:
     resolved_types: PVector[TypeContext] = pvector()
+    normalized_registry = pmap({camelized_python_name(k): v for k, v in schemas.items()})
     for type_name, schema in schemas.items():
         py_name, default, resolved = recursive_resolve_schema(
-            registry=schemas,
+            registry=normalized_registry,
             suggested_type_name=type_name,
             schema=schema,
             attr_name_normalizer=underscore,
-            common_types=common_types,
+            common_types=common_schema_types,
         )
         if resolved:
             resolved_types = resolved_types.extend(resolved)
-            common_types = common_types.set(type_name, resolved[-1])
+            resolved_common_type = resolved[-1]
         else:
             typ = TypeContext(
-                name=type_name,
+                name=camelized_python_name(type_name),
                 attrs=pvector(),
                 common_reference_as=py_name
             )
             resolved_types = resolved_types.append(typ)
-            common_types = common_types.set(type_name, typ)
+            resolved_common_type = typ
+
+        common_schema_types = common_schema_types.set(camelized_python_name(type_name), resolved_common_type)
 
     return resolved_types
 
 
-PYTHONIC = re.compile('/')
+NON_PYTHONIC_SYMBOLS = re.compile('[/:]')
 
 
 class Parsed(NamedTuple):
@@ -220,6 +229,17 @@ class Parsed(NamedTuple):
     """
     default_value: Optional[str] = None
     final_types: PVector[TypeContext] = pvector()
+
+
+EMPTY_NAME = 'EMPTY'
+
+
+def camelized_python_name(irregular_source: str) -> str:
+    """
+    :param irregular_source: source string that resembles a python name but that may contain invalid characters
+    :return: regular camelized python name
+    """
+    return camelize(pythonize_path_segment(irregular_source).segment)
 
 
 def recursive_resolve_schema(
@@ -231,226 +251,363 @@ def recursive_resolve_schema(
 ) -> Parsed:
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
-        if schema.enum:
-            actual_type_name = camelize(suggested_type_name)
-            enum_options = pvector(
-                TypeAttr(
-                    name=underscore(PYTHONIC.sub('_', x)).upper(),
-                    datatype='str',
-                    default=f"'{x}'",
-                    is_required=True
-                )
-                for x in schema.enum
-            )
-            final_types = final_types.append(
-                TypeContext(
-                    name=actual_type_name,
-                    docstring='',
-                    attrs=enum_options,
-                    is_enum=True
-                )
-            )
-            if schema.default is None:
-                default_value = None
-            else:
-                # construct enum value from the provided default string
-                default_value = f"{actual_type_name}('{schema.default}')"
-        else:
-            actual_type_name = 'str'
-            if schema.default is None:
-                default_value = None
-            else:
-                default_value = f"'{schema.default}'"
-        return Parsed(
-            actual_type_name=actual_type_name,
-            final_types=final_types,
-            default_value=default_value
-        )
+        return _process_string_or_enum(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.IntegerValue):
-        return Parsed(
-            actual_type_name='int',
-            default_value=f"{schema.default}" if schema.default is not None else None,
-            final_types=pvector()
-        )
+        return _process_integer(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
+
     elif isinstance(schema, oas.FloatValue):
-        return Parsed(
-            actual_type_name='float',
-            default_value=str(schema.default) if schema.default is not None else None,
-            final_types=pvector()
-        )
+        return _process_float(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
+
     elif isinstance(schema, oas.BooleanValue):
-        return Parsed(
-            actual_type_name='bool',
-            default_value=None if schema.default is None else str(schema.default),
-            final_types=pvector()
-        )
+        return _process_bool(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.ObjectValue):
-        attrs: PVector[TypeAttr] = pvector()
-        for attr_name, attr_schema_type in schema.properties.items():
-            attr_type_suggested_name = camelize('_'.join([suggested_type_name, attr_name]))
-            attr_type_actual_name, default, new_types = recursive_resolve_schema(
-                registry=registry,
-                suggested_type_name=attr_type_suggested_name,
-                schema=attr_schema_type,
-                attr_name_normalizer=attr_name_normalizer,
-                common_types=common_types
-            )
-            final_types = final_types.extend(new_types)
-            attrs = attrs.append(TypeAttr(
-                # TODO: propagate overrides
-                name=normalize_name(attr_name_normalizer(attr_name)),
-                datatype=attr_type_actual_name,
-                default=default,
-                is_required=attr_name in schema.required
-            ))
-        final_types = final_types.append(
-            TypeContext(
-                name=suggested_type_name,
-                docstring='',
-                attrs=attrs
-            )
-        )
-        return Parsed(
-            actual_type_name=suggested_type_name,
-            default_value=None,
-            final_types=final_types
-        )
+        return _process_object(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.Reference):
-        # Represents a reference to an object in common types domain
-        if schema.ref.location is not oas.custom_types.RefTo.SCHEMAS:
-            raise NotImplementedError(
-                f'This reference location is not supported yet: {schema.ref.location}'
-            )
-
-        # TODO: replace with a distinct alias type representation
-        if schema.ref.name in common_types:
-            typ = common_types[schema.ref.name]
-            return Parsed(
-                actual_type_name=typ.name,
-                default_value=None,
-                final_types=final_types
-            )
-        else:
-            to_resolve = registry[schema.ref.name]
-            actual_type_name, default, resolved_types = recursive_resolve_schema(
-                registry=registry,
-                suggested_type_name=schema.ref.name,
-                schema=to_resolve,
-                attr_name_normalizer=attr_name_normalizer,
-                common_types=common_types
-            )
-            final_types = final_types.extend(resolved_types)
-        return Parsed(
-            actual_type_name=actual_type_name,
-            default_value=default,
-            final_types=final_types
-        )
+        return _process_reference(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.ArrayValue):
-        sequence_type_literal = 'Sequence[{T}]'
-        to_resolve = schema.items
-        name = singularize(suggested_type_name)
-        actual_type_name, default, resolved_types = recursive_resolve_schema(
-            registry=registry,
-            suggested_type_name=name,
-            schema=to_resolve,
-            attr_name_normalizer=attr_name_normalizer,
-            common_types=common_types,
-        )
-        sequence_type_literal = sequence_type_literal.format(T=actual_type_name)
-        final_types = final_types.extend(resolved_types)
-        return Parsed(
-            actual_type_name=sequence_type_literal,
-            default_value=None,
-            final_types=final_types,
-        )
+        return _process_array(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.ObjectWithAdditionalProperties):
-        if schema.additional_properties is None:
-            return Parsed(
-                actual_type_name='Mapping[Any, Any]',
-                default_value=None,
-                final_types=final_types
-            )
-        else:
-            return recursive_resolve_schema(
-                registry=registry,
-                suggested_type_name=suggested_type_name,
-                schema=schema.additional_properties,
-                attr_name_normalizer=attr_name_normalizer,
-                common_types=common_types,
-            )
+        return _process_freeform_object(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.ProductSchemaType):
-        to_merge = (
-            find_reference(x, registry) if isinstance(x, oas.Reference) else x for x in schema.all_of  # type: ignore
-        )
-        to_merge = (x._asdict() for x in to_merge)
-        red: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
-        schema_ = oas.ObjectValue(**red)
-        return recursive_resolve_schema(
-            registry=registry,
-            suggested_type_name=suggested_type_name,
-            schema=schema_,
-            attr_name_normalizer=attr_name_normalizer,
-            common_types=common_types
-        )
+        return _process_product_schema_type(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, (oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne)):
-        if isinstance(schema, oas.UnionSchemaTypeAny):
-            items = schema.any_of
-        else:
-            items = schema.one_of
-        options: PVector[str] = pvector()
-        for schema_ in items:
-            variant_name = camelize(f'{suggested_type_name}_var{len(options) + 1}')
-            actual_variant_py_name, default, resolved_types = recursive_resolve_schema(
-                registry=registry,
-                suggested_type_name=variant_name,
-                schema=schema_,
-                attr_name_normalizer=attr_name_normalizer,
-                common_types=common_types,
-            )
-            options = options.append(actual_variant_py_name)
-
-            # We don't need to append aliases to the final types as they are already there
-            # either as primitive types, or as types that have been parsed already
-            if actual_variant_py_name == variant_name:
-                final_types = final_types.extend(resolved_types)
-
-        return Parsed(
-            actual_type_name=f'Union[{", ".join(options)}]',
-            default_value=None,
-            final_types=final_types
-        )
+        return _process_unions(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.EmptyValue):
-        return Parsed(
-            actual_type_name='Any',
-            default_value='None',
-            final_types=pvector(),
-        )
+        return _process_empty_value(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     elif isinstance(schema, oas.InlinedObjectValue):
-        schema_ = oas.ObjectValue(
-            type='object',
-            properties=schema.properties,
-            required=schema.required,
-            description=schema.description,
-        )
-        return recursive_resolve_schema(
-            registry=registry,
-            suggested_type_name=suggested_type_name,
-            schema=schema_,
-            attr_name_normalizer=attr_name_normalizer,
-            common_types=common_types,
-        )
+        return _process_inlined_object_value(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
     raise NotImplementedError(f'Unsupported recursive type: {schema}')
 
+
+def _process_inlined_object_value(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.InlinedObjectValue,
+    suggested_type_name: str
+) -> Parsed:
+    schema_ = oas.ObjectValue(
+        type='object',
+        properties=schema.properties,
+        required=schema.required,
+        description=schema.description,
+    )
+    return recursive_resolve_schema(
+        registry=registry,
+        suggested_type_name=suggested_type_name,
+        schema=schema_,
+        attr_name_normalizer=attr_name_normalizer,
+        common_types=common_types,
+    )
+
+
+def _process_empty_value(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.EmptyValue,
+    suggested_type_name: str
+) -> Parsed:
+    return Parsed(
+        actual_type_name='Any',
+        default_value='None',
+        final_types=pvector(),
+    )
+
+
+def _process_unions(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: Union[oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne],
+    suggested_type_name: str
+) -> Parsed:
+    if isinstance(schema, oas.UnionSchemaTypeAny):
+        items = schema.any_of
+    else:
+        items = schema.one_of
+    options: PVector[str] = pvector()
+    for schema_ in items:
+        variant_name = camelize(f'{suggested_type_name}_var{len(options) + 1}')
+        actual_variant_py_name, default, resolved_types = recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=variant_name,
+            schema=schema_,
+            attr_name_normalizer=attr_name_normalizer,
+            common_types=common_types,
+        )
+        options = options.append(actual_variant_py_name)
+
+        # We don't need to append aliases to the final types as they are already there
+        # either as primitive types, or as types that have been parsed already
+        if actual_variant_py_name == variant_name:
+            final_types = final_types.extend(resolved_types)
+    return Parsed(
+        actual_type_name=f'Union[{", ".join(options)}]',
+        default_value=None,
+        final_types=final_types
+    )
+
+
+def _process_product_schema_type(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.ProductSchemaType,
+    suggested_type_name: str
+) -> Parsed:
+    to_merge = (
+        find_reference(x, registry) if isinstance(x, oas.Reference) else x for x in schema.all_of  # type: ignore
+    )
+    to_merge = (x._asdict() for x in to_merge)
+    red: Mapping[str, Any] = reduce(merge_strategy.merge, to_merge, {})
+    schema_ = oas.ObjectValue(**red)
+    return recursive_resolve_schema(
+        registry=registry,
+        suggested_type_name=suggested_type_name,
+        schema=schema_,
+        attr_name_normalizer=attr_name_normalizer,
+        common_types=common_types
+    )
+
+
+def _process_freeform_object(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.ObjectWithAdditionalProperties,
+    suggested_type_name: str
+) -> Parsed:
+    if schema.additional_properties in (None, True):
+        return Parsed(
+            actual_type_name='Mapping[Any, Any]',
+            default_value=None,
+            final_types=final_types
+        )
+    elif schema.additional_properties is False:
+        raise NotImplementedError('Not sure what to do with "additionalProperties: false"')
+    else:
+        return recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=suggested_type_name,
+            schema=schema.additional_properties,  # type: ignore
+            attr_name_normalizer=attr_name_normalizer,
+            common_types=common_types,
+        )
+
+
+def _process_array(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.ArrayValue,
+    suggested_type_name: str
+) -> Parsed:
+    sequence_type_literal = 'Sequence[{T}]'
+    to_resolve = schema.items
+    name = singularize(suggested_type_name)
+    actual_type_name, default, resolved_types = recursive_resolve_schema(
+        registry=registry,
+        suggested_type_name=name,
+        schema=to_resolve,
+        attr_name_normalizer=attr_name_normalizer,
+        common_types=common_types,
+    )
+    sequence_type_literal = sequence_type_literal.format(T=actual_type_name)
+    final_types = final_types.extend(resolved_types)
+    return Parsed(
+        actual_type_name=sequence_type_literal,
+        default_value=None,
+        final_types=final_types,
+    )
+
+
+def _process_reference(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.Reference,
+    suggested_type_name: str
+) -> Parsed:
+    # Represents a reference to an object in common types domain
+    if schema.ref.location is not oas.custom_types.RefTo.SCHEMAS:
+        raise NotImplementedError(
+            f'This reference location is not supported yet: {schema.ref.location}'
+        )
+
+    # TODO: replace with a distinct alias type representation
+    reference_key = camelized_python_name(schema.ref.name)
+    if reference_key in common_types:
+        typ = common_types[reference_key]
+        actual_type_name = camelized_python_name(typ.name)
+        return Parsed(
+            actual_type_name=actual_type_name,
+            default_value=None,
+            final_types=final_types
+        )
+    else:
+        to_resolve = registry[reference_key]
+
+        actual_type_name, default, resolved_types = recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=schema.ref.name,
+            schema=to_resolve,
+            attr_name_normalizer=attr_name_normalizer,
+            common_types=common_types
+        )
+        final_types = final_types.extend(resolved_types)
+    return Parsed(
+        actual_type_name=actual_type_name,
+        default_value=default,
+        final_types=final_types
+    )
+
+
+def _process_object(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.ObjectValue,
+    suggested_type_name: str
+) -> Parsed:
+    attrs: PVector[TypeAttr] = pvector()
+    for attr_name, attr_schema_type in schema.properties.items():
+        attr_type_suggested_name = camelize('_'.join([suggested_type_name, attr_name]))
+        attr_type_actual_name, default, new_types = recursive_resolve_schema(
+            registry=registry,
+            suggested_type_name=attr_type_suggested_name,
+            schema=attr_schema_type,
+            attr_name_normalizer=attr_name_normalizer,
+            common_types=common_types
+        )
+        final_types = final_types.extend(new_types)
+        attrs = attrs.append(TypeAttr(
+            # TODO: propagate overrides
+            name=normalize_name(attr_name_normalizer(attr_name)),
+            datatype=attr_type_actual_name,
+            default=default,
+            is_required=attr_name in schema.required
+        ))
+    final_types = final_types.append(
+        TypeContext(
+            name=suggested_type_name,
+            docstring='',
+            attrs=attrs
+        )
+    )
+    return Parsed(
+        actual_type_name=camelized_python_name(suggested_type_name),
+        default_value=None,
+        final_types=final_types
+    )
+
+
+def _process_bool(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.BooleanValue,
+    suggested_type_name: str
+) -> Parsed:
+    return Parsed(
+        actual_type_name='bool',
+        default_value=None if schema.default is None else str(schema.default),
+        final_types=pvector()
+    )
+
+
+def _process_float(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.FloatValue,
+    suggested_type_name: str
+) -> Parsed:
+    return Parsed(
+        actual_type_name='float',
+        default_value=str(schema.default) if schema.default is not None else None,
+        final_types=pvector()
+    )
+
+
+def _process_integer(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.IntegerValue,
+    suggested_type_name: str
+) -> Parsed:
+    return Parsed(
+        actual_type_name='int',
+        default_value=f"{schema.default}" if schema.default is not None else None,
+        final_types=pvector()
+    )
+
+
+def _process_string_or_enum(
+    attr_name_normalizer: Callable[[str], str],
+    common_types: ResolvedTypesMap,
+    final_types: PVector[TypeContext],
+    registry: Mapping[str, oas.SchemaType],
+    schema: oas.StringValue,
+    suggested_type_name: str
+) -> Parsed:
+    if schema.enum:
+        actual_type_name = camelized_python_name(suggested_type_name)
+        enum_options = pvector(
+            TypeAttr(
+                name=underscore(NON_PYTHONIC_SYMBOLS.sub('_', x)).upper() if x else EMPTY_NAME,
+                datatype='str',
+                default=f"'{x}'",
+                is_required=True
+            )
+            for x in schema.enum
+        )
+        final_types = final_types.append(
+            TypeContext(
+                name=actual_type_name,
+                docstring='',
+                attrs=enum_options,
+                is_enum=True
+            )
+        )
+        if schema.default is None:
+            default_value = None
+        else:
+            # construct enum value from the provided default string
+            default_value = f"{actual_type_name}('{schema.default}')"
+    else:
+        actual_type_name = 'str'
+        if schema.default is None:
+            default_value = None
+        else:
+            default_value = f"'{schema.default}'"
+    return Parsed(
+        actual_type_name=actual_type_name,
+        final_types=final_types,
+        default_value=default_value
+    )
 
 
 def api_path_to_filepath(api_path: str, sep: str = '/') -> EndpointSegments:
@@ -502,7 +659,22 @@ PARAM_CONTAINERS: PMap[oas.ParamLocation, PVector[oas.OperationParameter]] = pma
 )
 
 
-def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -> SupportedMethods:
+def assign_param_to_container(
+    containers: PMap[oas.ParamLocation, PVector[oas.OperationParameter]],
+    param: oas.OperationParameter
+) -> PMap[oas.ParamLocation, PVector[oas.OperationParameter]]:
+    try:
+        container = containers[param.in_]
+    except KeyError:
+        raise NotImplementedError(f'Param parsing is not supported for parameters in {param.in_}')
+    return containers.set(param.in_, container.append(param))
+
+
+def iter_supported_methods(
+    common_types: ResolvedTypesMap,
+    common_params: Mapping[str, oas.OperationParameter],
+    path: oas.PathItem,
+) -> SupportedMethods:
     """
     :param spec: reference to the rest of the spec that may be useful for parsing
     :param path: current path
@@ -516,15 +688,16 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
               , path.trace
               )
     supported_methods = ((nam, met) for nam, met in path._asdict().items() if met and met in methods)
+
     for name, (method) in supported_methods:
         containers = PARAM_CONTAINERS
         for param in method.parameters:
-            try:
-                container = containers[param.in_]
-            except KeyError:
-                raise NotImplementedError(f'Param parsing is not supported for parameters in {param.in_}')
+            if isinstance(param, oas.OperationParameter):
+                containers = assign_param_to_container(containers, param)
+            elif isinstance(param, oas.Reference):
+                containers = assign_param_to_container(containers, common_params[param.ref.name])
             else:
-                containers = containers.set(param.in_, container.append(param))
+                raise NotImplementedError(f'Parameter as {type(param)}')
 
         params = Params(
             query_params=containers[oas.ParamLocation.QUERY],
@@ -703,9 +876,10 @@ def add_to_set(config, path, base: frozenset, nxt: frozenset) -> frozenset:
 
 
 def find_reference(ref: oas.Reference, components: ResolvedTypesMap) -> oas.ObjectValue:
-    if ref.ref.name not in components:
+    key = camelized_python_name(ref.ref.name)
+    if key not in components:
         raise NotImplementedError('Reference is not found in the registry')
-    obj = components[ref.ref.name]
+    obj = components[key]
     assert isinstance(obj, oas.ObjectValue), "Referenced object is not of type ObjectValue"
     return obj
 

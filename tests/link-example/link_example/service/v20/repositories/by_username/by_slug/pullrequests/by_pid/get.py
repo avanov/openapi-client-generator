@@ -25,7 +25,7 @@ class Params(NamedTuple):
     pid: str
 
 
-Response = pullrequest
+Response = Pullrequest
 
 
 class Headers(NamedTuple):
