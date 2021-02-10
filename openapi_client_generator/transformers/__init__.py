@@ -165,53 +165,62 @@ class SpecMeta(NamedTuple):
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
-    common_types = resolve_schemas(spec.components.schemas, common_types=pmap())
-    common_types_ = pmap((x.name, x) for x in common_types)
+
+    common_schema_types = resolve_schemas(spec.components.schemas, common_schema_types=pmap())
+    common_schema_types = pvector(x._replace(name=camelized_python_name(x.name)) for x in common_schema_types)
+    common_schema_types_ = pmap((x.name, x) for x in common_schema_types)
 
     for path, item in spec.paths.items():
         pth = api_path_to_filepath(path)
         endpoint = Endpoint(
             path_item=item,
-            supported_methods=iter_supported_methods(common_types_, item)
+            supported_methods=iter_supported_methods(
+                common_types=common_schema_types_,
+                common_params=spec.components.parameters,
+                path=item
+            )
         )
         paths[pth] = endpoint
 
     return SpecMeta(
         spec=spec,
         paths=paths,
-        common_types=common_types
+        common_types=common_schema_types
     )
 
 
 def resolve_schemas(
     schemas: Mapping[str, oas.SchemaType],
-    common_types: ResolvedTypesMap
+    common_schema_types: ResolvedTypesMap
 ) -> ResolvedTypesVec:
     resolved_types: PVector[TypeContext] = pvector()
+    normalized_registry = pmap({camelized_python_name(k): v for k, v in schemas.items()})
     for type_name, schema in schemas.items():
         py_name, default, resolved = recursive_resolve_schema(
-            registry=schemas,
+            registry=normalized_registry,
             suggested_type_name=type_name,
             schema=schema,
             attr_name_normalizer=underscore,
-            common_types=common_types,
+            common_types=common_schema_types,
         )
         if resolved:
             resolved_types = resolved_types.extend(resolved)
-            common_types = common_types.set(type_name, resolved[-1])
+            resolved_common_type = resolved[-1]
         else:
             typ = TypeContext(
-                name=type_name,
+                name=camelized_python_name(type_name),
                 attrs=pvector(),
                 common_reference_as=py_name
             )
             resolved_types = resolved_types.append(typ)
-            common_types = common_types.set(type_name, typ)
+            resolved_common_type = typ
+
+        common_schema_types = common_schema_types.set(camelized_python_name(type_name), resolved_common_type)
 
     return resolved_types
 
 
-PYTHONIC = re.compile('/')
+NON_PYTHONIC_SYMBOLS = re.compile('[/:]')
 
 
 class Parsed(NamedTuple):
@@ -220,6 +229,17 @@ class Parsed(NamedTuple):
     """
     default_value: Optional[str] = None
     final_types: PVector[TypeContext] = pvector()
+
+
+EMPTY_NAME = 'EMPTY'
+
+
+def camelized_python_name(irregular_source: str) -> str:
+    """
+    :param irregular_source: source string that resembles a python name but that may contain invalid characters
+    :return: regular camelized python name
+    """
+    return camelize(pythonize_path_segment(irregular_source).segment)
 
 
 def recursive_resolve_schema(
@@ -232,10 +252,10 @@ def recursive_resolve_schema(
     final_types: PVector[TypeContext] = pvector()
     if isinstance(schema, oas.StringValue):
         if schema.enum:
-            actual_type_name = camelize(suggested_type_name)
+            actual_type_name = camelized_python_name(suggested_type_name)
             enum_options = pvector(
                 TypeAttr(
-                    name=underscore(PYTHONIC.sub('_', x)).upper(),
+                    name=underscore(NON_PYTHONIC_SYMBOLS.sub('_', x)).upper() if x else EMPTY_NAME,
                     datatype='str',
                     default=f"'{x}'",
                     is_required=True
@@ -313,7 +333,7 @@ def recursive_resolve_schema(
             )
         )
         return Parsed(
-            actual_type_name=suggested_type_name,
+            actual_type_name=camelized_python_name(suggested_type_name),
             default_value=None,
             final_types=final_types
         )
@@ -326,15 +346,18 @@ def recursive_resolve_schema(
             )
 
         # TODO: replace with a distinct alias type representation
-        if schema.ref.name in common_types:
-            typ = common_types[schema.ref.name]
+        reference_key = camelized_python_name(schema.ref.name)
+        if reference_key in common_types:
+            typ = common_types[reference_key]
+            actual_type_name = camelized_python_name(typ.name)
             return Parsed(
-                actual_type_name=typ.name,
+                actual_type_name=actual_type_name,
                 default_value=None,
                 final_types=final_types
             )
         else:
-            to_resolve = registry[schema.ref.name]
+            to_resolve = registry[reference_key]
+
             actual_type_name, default, resolved_types = recursive_resolve_schema(
                 registry=registry,
                 suggested_type_name=schema.ref.name,
@@ -504,7 +527,22 @@ PARAM_CONTAINERS: PMap[oas.ParamLocation, PVector[oas.OperationParameter]] = pma
 )
 
 
-def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -> SupportedMethods:
+def assign_param_to_container(
+    containers: PMap[oas.ParamLocation, PVector[oas.OperationParameter]],
+    param: oas.OperationParameter
+) -> PMap[oas.ParamLocation, PVector[oas.OperationParameter]]:
+    try:
+        container = containers[param.in_]
+    except KeyError:
+        raise NotImplementedError(f'Param parsing is not supported for parameters in {param.in_}')
+    return containers.set(param.in_, container.append(param))
+
+
+def iter_supported_methods(
+    common_types: ResolvedTypesMap,
+    common_params: Mapping[str, oas.OperationParameter],
+    path: oas.PathItem,
+) -> SupportedMethods:
     """
     :param spec: reference to the rest of the spec that may be useful for parsing
     :param path: current path
@@ -518,15 +556,16 @@ def iter_supported_methods(common_types: ResolvedTypesMap, path: oas.PathItem) -
               , path.trace
               )
     supported_methods = ((nam, met) for nam, met in path._asdict().items() if met and met in methods)
+
     for name, (method) in supported_methods:
         containers = PARAM_CONTAINERS
         for param in method.parameters:
-            try:
-                container = containers[param.in_]
-            except KeyError:
-                raise NotImplementedError(f'Param parsing is not supported for parameters in {param.in_}')
+            if isinstance(param, oas.OperationParameter):
+                containers = assign_param_to_container(containers, param)
+            elif isinstance(param, oas.Reference):
+                containers = assign_param_to_container(containers, common_params[param.ref.name])
             else:
-                containers = containers.set(param.in_, container.append(param))
+                raise NotImplementedError(f'Parameter as {type(param)}')
 
         params = Params(
             query_params=containers[oas.ParamLocation.QUERY],
@@ -705,9 +744,10 @@ def add_to_set(config, path, base: frozenset, nxt: frozenset) -> frozenset:
 
 
 def find_reference(ref: oas.Reference, components: ResolvedTypesMap) -> oas.ObjectValue:
-    if ref.ref.name not in components:
+    key = camelized_python_name(ref.ref.name)
+    if key not in components:
         raise NotImplementedError('Reference is not found in the registry')
-    obj = components[ref.ref.name]
+    obj = components[key]
     assert isinstance(obj, oas.ObjectValue), "Referenced object is not of type ObjectValue"
     return obj
 
