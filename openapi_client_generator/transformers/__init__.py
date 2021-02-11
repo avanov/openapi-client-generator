@@ -127,6 +127,12 @@ DEFAULT_HEADERS_TYPE      = TypeContext(
             is_required=True
         ),
         TypeAttr(
+            name='content_type',
+            datatype='str',
+            default="'application/json'",
+            is_required=True
+        ),
+        TypeAttr(
             name='accept_charset',
             datatype='str',
             default="'utf-8'",

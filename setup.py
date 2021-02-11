@@ -38,7 +38,7 @@ with (here / 'README.rst').open() as f:
 # ----------------------------
 
 setup(name='openapi-client-generator',
-      version='1.0.10',
+      version='1.0.11',
       description='OpenAPI Client Generator',
       long_description=README,
       classifiers=[

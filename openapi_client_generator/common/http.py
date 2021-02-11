@@ -69,7 +69,7 @@ class Client(NamedTuple):
             method.value.upper(),
             url,
             params=query,
-            data=payload,
+            json=payload,
             headers={dasherize(k): v for k, v in headers.items() if v is not None}
         ).prepare()
 
