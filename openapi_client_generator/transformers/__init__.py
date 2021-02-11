@@ -356,7 +356,7 @@ def _process_unions(
         items = schema.one_of
     options: PVector[str] = pvector()
     for schema_ in items:
-        variant_name = camelize(f'{suggested_type_name}_var{len(options) + 1}')
+        variant_name = camelize(f'{camelized_python_name(suggested_type_name)}_var{len(options) + 1}')
         actual_variant_py_name, default, resolved_types = recursive_resolve_schema(
             registry=registry,
             suggested_type_name=variant_name,
@@ -366,10 +366,7 @@ def _process_unions(
         )
         options = options.append(actual_variant_py_name)
 
-        # We don't need to append aliases to the final types as they are already there
-        # either as primitive types, or as types that have been parsed already
-        if actual_variant_py_name == variant_name:
-            final_types = final_types.extend(resolved_types)
+        final_types = final_types.extend(resolved_types)
     return Parsed(
         actual_type_name=f'Union[{", ".join(options)}]',
         default_value=None,
@@ -505,7 +502,7 @@ def _process_object(
 ) -> Parsed:
     attrs: PVector[TypeAttr] = pvector()
     for attr_name, attr_schema_type in schema.properties.items():
-        attr_type_suggested_name = camelize('_'.join([suggested_type_name, attr_name]))
+        attr_type_suggested_name = camelized_python_name('_'.join([suggested_type_name, attr_name]))
         attr_type_actual_name, default, new_types = recursive_resolve_schema(
             registry=registry,
             suggested_type_name=attr_type_suggested_name,
@@ -523,7 +520,7 @@ def _process_object(
         ))
     final_types = final_types.append(
         TypeContext(
-            name=suggested_type_name,
+            name=camelized_python_name(suggested_type_name),
             docstring='',
             attrs=attrs
         )
