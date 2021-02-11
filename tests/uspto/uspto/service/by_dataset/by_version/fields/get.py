@@ -29,6 +29,8 @@ Response = str
 class Headers(NamedTuple):
     """"""
 
+    content_type: str = "application/json"
+
     accept_charset: str = "utf-8"
 
     accept: str = "application/json"
