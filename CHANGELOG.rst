@@ -2,6 +2,12 @@
 CHANGELOG
 =========
 
+1.0.10
+======
+
+* Respecting ordering of types present in unions
+
+
 1.0.9
 =====
 

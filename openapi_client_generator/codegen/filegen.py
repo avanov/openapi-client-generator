@@ -186,7 +186,7 @@ def generate_from_layout(l: ProjectLayout) -> None:
         _generate_file(binding)
     _generate_file(Binding(l.client_root / '__init__.py', templates.PACKAGE_INIT, EMPTY_CONTEXT))
     _copy_common_library(l.common_root)
-    _add_common_types(l.common_root, l.common_types)
+    _generate_common_types(l.common_root, l.common_types)
     _generate_endpoints(l.endpoints)
     _generate_imports(l.endpoints_root)
     _mark_as_typed(l.client_root)
@@ -219,7 +219,7 @@ def _copy_common_library(common_root: Path) -> None:
     copytree(str(Path(dist.location) / PACKAGE_NAME / 'common'), str(common_root))
 
 
-def _add_common_types(common_root: Path, common_types: ResolvedTypesVec) -> None:
+def _generate_common_types(common_root: Path, common_types: ResolvedTypesVec) -> None:
     processed = set()  # TODO: discover why duplicates exist
     with (common_root / 'types.py').open('a') as f:
         for typ in common_types:
