@@ -198,6 +198,7 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
             supported_methods=iter_supported_methods(
                 common_types=common_schema_types_,
                 common_params=spec.components.parameters,
+                common_responses=spec.components.responses,
                 path=item
             )
         )
@@ -691,6 +692,7 @@ def assign_param_to_container(
 def iter_supported_methods(
     common_types: ResolvedTypesMap,
     common_params: Mapping[str, oas.OperationParameter],
+    common_responses: Mapping[str, oas.Response],
     path: oas.PathItem,
 ) -> SupportedMethods:
     """
@@ -763,47 +765,18 @@ def iter_supported_methods(
             except KeyError:
                 supported_status, response = list(method.responses.items())[0]
 
-            if not response.content:
-                response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
-                    name='None',
-                    common_reference_as=required_response_name
-                )])
+            if isinstance(response, oas.Response):
+                response_is_stream, response_types = _process_response_type(common_types, required_response_name,
+                                                                            response, response_is_stream)
+            elif isinstance(response, oas.Reference):
+                try:
+                    response_ = common_responses[response.ref.name]
+                except KeyError:
+                    raise TypeError(f'Response reference "{response.ref.name}" is not found in common types')
+                response_is_stream, response_types = _process_response_type(common_types, required_response_name,
+                                                                            response_, response_is_stream)
             else:
-
-                for content_type, meta in response.content.items():
-                    if content_type.format in (oas.ContentTypeFormat.JSON,
-                                               oas.ContentTypeFormat.ANYTHING,
-                                               oas.ContentTypeFormat.FORM_URLENCODED,
-                                               oas.ContentTypeFormat.EVENT_STREAM):
-                        response_schema: Optional[oas.SchemaType] = meta.schema
-                        response_is_stream = content_type.format in (oas.ContentTypeFormat.EVENT_STREAM, oas.ContentTypeFormat.BINARY_STREAM)
-                        break
-                else:
-                    last_response = list(response.content.items())[-1][1]
-                    response_schema = last_response.schema
-
-                if response_schema is None:
-                    response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
-                        name='Any',
-                        common_reference_as=required_response_name
-                    )])
-                else:
-                    actual_response_type_name, default, response_types = recursive_resolve_schema(
-                        registry={},
-                        suggested_type_name=required_response_name,
-                        schema=response_schema,
-                        attr_name_normalizer=underscore,
-                        common_types=common_types,
-                    )
-                    if actual_response_type_name != required_response_name:
-                        response_types = response_types.append(
-                            DEFAULT_RESPONSE_TYPE._replace(
-                                name=actual_response_type_name,
-                                attrs=pvector(),
-                                common_reference_as=required_response_name
-                            )
-                        )
-
+                raise NotImplementedError(f'Unrecognised response type: {type(response)}')
         else:
             response_types = pvector([DEFAULT_RESPONSE_TYPE])
 
@@ -828,6 +801,49 @@ def iter_supported_methods(
             headers_types=headers_types,
             response_is_stream=response_is_stream
         )
+
+
+def _process_response_type(common_types, required_response_name, response, response_is_stream):
+    if not response.content:
+        response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
+            name='None',
+            common_reference_as=required_response_name
+        )])
+    else:
+        for content_type, meta in response.content.items():
+            if content_type.format in (oas.ContentTypeFormat.JSON,
+                                       oas.ContentTypeFormat.ANYTHING,
+                                       oas.ContentTypeFormat.FORM_URLENCODED,
+                                       oas.ContentTypeFormat.EVENT_STREAM):
+                response_schema: Optional[oas.SchemaType] = meta.schema
+                response_is_stream = content_type.format in (oas.ContentTypeFormat.EVENT_STREAM, oas.ContentTypeFormat.BINARY_STREAM)
+                break
+        else:
+            last_response = list(response.content.items())[-1][1]
+            response_schema = last_response.schema
+
+        if response_schema is None:
+            response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
+                name='Any',
+                common_reference_as=required_response_name
+            )])
+        else:
+            actual_response_type_name, default, response_types = recursive_resolve_schema(
+                registry={},
+                suggested_type_name=required_response_name,
+                schema=response_schema,
+                attr_name_normalizer=underscore,
+                common_types=common_types,
+            )
+            if actual_response_type_name != required_response_name:
+                response_types = response_types.append(
+                    DEFAULT_RESPONSE_TYPE._replace(
+                        name=actual_response_type_name,
+                        attrs=pvector(),
+                        common_reference_as=required_response_name
+                    )
+                )
+    return response_is_stream, response_types
 
 
 def infer_params_type(params: Sequence[oas.OperationParameter],
