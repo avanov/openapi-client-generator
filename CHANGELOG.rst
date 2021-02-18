@@ -2,6 +2,12 @@
 CHANGELOG
 =========
 
+1.0.12
+======
+
+* Support for responses as common references
+
+
 1.0.10
 ======
 

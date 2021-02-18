@@ -1,4 +1,4 @@
-openapi-type>=0.0.19
+openapi-type==0.0.21
 deepmerge>=0.1.1,<0.2
 typeit
 jinja2
