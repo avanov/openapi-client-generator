@@ -766,17 +766,17 @@ def iter_supported_methods(
                 supported_status, response = list(method.responses.items())[0]
 
             if isinstance(response, oas.Response):
-                response_is_stream, response_types = _process_response_type(common_types, required_response_name,
-                                                                            response, response_is_stream)
+                response_ = response
             elif isinstance(response, oas.Reference):
                 try:
                     response_ = common_responses[oas.ResponseTypeName(response.ref.name)]
                 except KeyError:
                     raise TypeError(f'Response reference "{response.ref.name}" is not found in common types')
-                response_is_stream, response_types = _process_response_type(common_types, required_response_name,
-                                                                            response_, response_is_stream)
             else:
                 raise NotImplementedError(f'Unrecognised response type: {type(response)}')
+
+            response_is_stream, response_types = _process_response_type(common_types, required_response_name,
+                                                                        response_, response_is_stream)
         else:
             response_types = pvector([DEFAULT_RESPONSE_TYPE])
 
