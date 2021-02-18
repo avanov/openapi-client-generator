@@ -691,8 +691,8 @@ def assign_param_to_container(
 
 def iter_supported_methods(
     common_types: ResolvedTypesMap,
-    common_params: Mapping[str, oas.OperationParameter],
-    common_responses: Mapping[str, oas.Response],
+    common_params: Mapping[oas.ParamTypeName, oas.OperationParameter],
+    common_responses: Mapping[oas.ResponseTypeName, oas.Response],
     path: oas.PathItem,
 ) -> SupportedMethods:
     """
@@ -715,7 +715,7 @@ def iter_supported_methods(
             if isinstance(param, oas.OperationParameter):
                 containers = assign_param_to_container(containers, param)
             elif isinstance(param, oas.Reference):
-                containers = assign_param_to_container(containers, common_params[param.ref.name])
+                containers = assign_param_to_container(containers, common_params[oas.ParamTypeName(param.ref.name)])
             else:
                 raise NotImplementedError(f'Parameter as {type(param)}')
 
@@ -770,7 +770,7 @@ def iter_supported_methods(
                                                                             response, response_is_stream)
             elif isinstance(response, oas.Reference):
                 try:
-                    response_ = common_responses[response.ref.name]
+                    response_ = common_responses[oas.ResponseTypeName(response.ref.name)]
                 except KeyError:
                     raise TypeError(f'Response reference "{response.ref.name}" is not found in common types')
                 response_is_stream, response_types = _process_response_type(common_types, required_response_name,
@@ -803,7 +803,12 @@ def iter_supported_methods(
         )
 
 
-def _process_response_type(common_types, required_response_name, response, response_is_stream):
+def _process_response_type(
+    common_types: PMap[str, TypeContext],
+    required_response_name: str,
+    response: oas.Response,
+    response_is_stream: bool
+) -> Tuple[bool,  PVector[TypeContext]]:
     if not response.content:
         response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
             name='None',
