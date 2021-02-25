@@ -182,12 +182,17 @@ class SpecMeta(NamedTuple):
     """
     paths: Mapping[EndpointSegments, Endpoint]
     common_types: ResolvedTypesVec
+    common_schema_registry: PMap[str, oas.SchemaType]
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
 
-    common_schema_types = resolve_schemas(spec.components.schemas, common_schema_types=pmap())
+    common_schemas_registry = pmap({camelized_python_name(k): v for k, v in spec.components.schemas.items()})
+    common_schema_types = resolve_schemas(
+        common_schema_types=pmap(),
+        common_schemas_registry=common_schemas_registry
+    )
     common_schema_types = pvector(x._replace(name=camelized_python_name(x.name)) for x in common_schema_types)
     common_schema_types_ = pmap((x.name, x) for x in common_schema_types)
 
@@ -199,6 +204,7 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
                 common_types=common_schema_types_,
                 common_params=spec.components.parameters,
                 common_responses=spec.components.responses,
+                common_schemas_registry=common_schemas_registry,
                 path=item
             )
         )
@@ -207,19 +213,19 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     return SpecMeta(
         spec=spec,
         paths=paths,
-        common_types=common_schema_types
+        common_types=common_schema_types,
+        common_schema_registry=common_schemas_registry,
     )
 
 
 def resolve_schemas(
-    schemas: Mapping[str, oas.SchemaType],
-    common_schema_types: ResolvedTypesMap
+    common_schema_types: ResolvedTypesMap,
+    common_schemas_registry: PMap[str, oas.SchemaType],
 ) -> ResolvedTypesVec:
     resolved_types: PVector[TypeContext] = pvector()
-    normalized_registry = pmap({camelized_python_name(k): v for k, v in schemas.items()})
-    for type_name, schema in schemas.items():
+    for type_name, schema in common_schemas_registry.items():
         py_name, default, resolved = recursive_resolve_schema(
-            registry=normalized_registry,
+            registry=common_schemas_registry,
             suggested_type_name=type_name,
             schema=schema,
             attr_name_normalizer=underscore,
@@ -693,10 +699,11 @@ def iter_supported_methods(
     common_types: ResolvedTypesMap,
     common_params: Mapping[oas.ParamTypeName, oas.OperationParameter],
     common_responses: Mapping[oas.ResponseTypeName, oas.Response],
+    common_schemas_registry: PMap[str, oas.SchemaType],
     path: oas.PathItem,
 ) -> SupportedMethods:
     """
-    :param spec: reference to the rest of the spec that may be useful for parsing
+    :param common_types: resolved types for common section
     :param path: current path
     """
     methods = ( path.head
@@ -775,8 +782,9 @@ def iter_supported_methods(
             else:
                 raise NotImplementedError(f'Unrecognised response type: {type(response)}')
 
-            response_is_stream, response_types = _process_response_type(common_types, required_response_name,
-                                                                        response_, response_is_stream)
+            response_is_stream, response_types = _process_response_type(
+                common_schemas_registry,
+                common_types, required_response_name, response_, response_is_stream)
         else:
             response_types = pvector([DEFAULT_RESPONSE_TYPE])
 
@@ -804,10 +812,11 @@ def iter_supported_methods(
 
 
 def _process_response_type(
+    common_schemas_registry: PMap[str, oas.SchemaType],
     common_types: PMap[str, TypeContext],
     required_response_name: str,
     response: oas.Response,
-    response_is_stream: bool
+    response_is_stream: bool,
 ) -> Tuple[bool,  PVector[TypeContext]]:
     if not response.content:
         response_types = pvector([DEFAULT_RESPONSE_TYPE._replace(
@@ -834,7 +843,7 @@ def _process_response_type(
             )])
         else:
             actual_response_type_name, default, response_types = recursive_resolve_schema(
-                registry={},
+                registry=common_schemas_registry,
                 suggested_type_name=required_response_name,
                 schema=response_schema,
                 attr_name_normalizer=underscore,

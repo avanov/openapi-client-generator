@@ -23,26 +23,34 @@ underscored = TypeConstructor
 AttrOverrides = Mapping[Union[property, Tuple[Type, str]], str]
 
 
-class OrderStatus(Enum):
-    PLACED = "placed"
-    APPROVED = "approved"
-    DELIVERED = "delivered"
-
-
-class Order(NamedTuple):
+class User(NamedTuple):
     """"""
 
-    status: Optional[OrderStatus] = None
+    username: Optional[str] = None
 
-    ship_date: Optional[str] = None
+    user_status: Optional[int] = None
 
-    quantity: Optional[int] = None
+    phone: Optional[str] = None
 
-    pet_id: Optional[int] = None
+    password: Optional[str] = None
+
+    last_name: Optional[str] = None
 
     id: Optional[int] = None
 
-    complete: Optional[bool] = None
+    first_name: Optional[str] = None
+
+    email: Optional[str] = None
+
+
+class ApiResponse(NamedTuple):
+    """"""
+
+    type: Optional[str] = None
+
+    message: Optional[str] = None
+
+    code: Optional[int] = None
 
 
 class Address(NamedTuple):
@@ -67,7 +75,29 @@ class Customer(NamedTuple):
     address: Optional[Sequence[Address]] = None
 
 
-class Category(NamedTuple):
+class OrderStatus(Enum):
+    PLACED = "placed"
+    APPROVED = "approved"
+    DELIVERED = "delivered"
+
+
+class Order(NamedTuple):
+    """"""
+
+    status: Optional[OrderStatus] = None
+
+    ship_date: Optional[str] = None
+
+    quantity: Optional[int] = None
+
+    pet_id: Optional[int] = None
+
+    id: Optional[int] = None
+
+    complete: Optional[bool] = None
+
+
+class Tag(NamedTuple):
     """"""
 
     name: Optional[str] = None
@@ -75,27 +105,7 @@ class Category(NamedTuple):
     id: Optional[int] = None
 
 
-class User(NamedTuple):
-    """"""
-
-    username: Optional[str] = None
-
-    user_status: Optional[int] = None
-
-    phone: Optional[str] = None
-
-    password: Optional[str] = None
-
-    last_name: Optional[str] = None
-
-    id: Optional[int] = None
-
-    first_name: Optional[str] = None
-
-    email: Optional[str] = None
-
-
-class Tag(NamedTuple):
+class Category(NamedTuple):
     """"""
 
     name: Optional[str] = None
@@ -123,13 +133,3 @@ class Pet(NamedTuple):
     id: Optional[int] = None
 
     category: Optional[Category] = None
-
-
-class ApiResponse(NamedTuple):
-    """"""
-
-    type: Optional[str] = None
-
-    message: Optional[str] = None
-
-    code: Optional[int] = None
