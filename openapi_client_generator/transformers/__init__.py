@@ -264,7 +264,7 @@ def recursive_resolve_schema(
     except KeyError:
         raise NotImplementedError(f'Unsupported recursive type: {schema}')
 
-    return processor(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
+    return processor(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)  # type: ignore
 
 
 def _process_inlined_object_value(
