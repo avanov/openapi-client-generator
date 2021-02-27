@@ -2,7 +2,6 @@
 """
 import re
 from pathlib import Path
-from string import digits
 from functools import reduce
 from typing import NamedTuple, Mapping, Sequence, Generator, Optional, Callable, Any, Tuple, Union
 
@@ -14,18 +13,7 @@ from pyrsistent import pmap, pvector
 import deepmerge
 
 
-class EndpointSegment(NamedTuple):
-    """ Represents a single endpoint segment, a.k.a. a thing between '/' symbols
-    """
-    original: str
-    """ original value
-    """
-    segment: str
-    """ normalized value
-    """
-    placeholder: Optional[str] = None
-    """ if used as a placeholder, the value contains a string representation of it
-    """
+from .schemas import camelized_python_name, pythonize_path_segment, EndpointSegment, NormalizedSchemas, normalize_schema
 
 
 class EndpointSegments(NamedTuple):
@@ -182,13 +170,13 @@ class SpecMeta(NamedTuple):
     """
     paths: Mapping[EndpointSegments, Endpoint]
     common_types: ResolvedTypesVec
-    common_schema_registry: PMap[str, oas.SchemaType]
+    common_schema_registry: NormalizedSchemas
 
 
 def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
     paths = {}
 
-    common_schemas_registry = pmap({camelized_python_name(k): v for k, v in spec.components.schemas.items()})
+    common_schemas_registry = normalize_schema(spec.components.schemas)
     common_schema_types = resolve_schemas(
         common_schema_types=pmap(),
         common_schemas_registry=common_schemas_registry
@@ -220,7 +208,7 @@ def openapi_to_codegen_metadata(spec: oas.OpenAPI) -> SpecMeta:
 
 def resolve_schemas(
     common_schema_types: ResolvedTypesMap,
-    common_schemas_registry: PMap[str, oas.SchemaType],
+    common_schemas_registry: NormalizedSchemas,
 ) -> ResolvedTypesVec:
     resolved_types: PVector[TypeContext] = pvector()
     for type_name, schema in common_schemas_registry.items():
@@ -262,14 +250,6 @@ class Parsed(NamedTuple):
 EMPTY_NAME = 'EMPTY'
 
 
-def camelized_python_name(irregular_source: str) -> str:
-    """
-    :param irregular_source: source string that resembles a python name but that may contain invalid characters
-    :return: regular camelized python name
-    """
-    return camelize(pythonize_path_segment(irregular_source).segment)
-
-
 def recursive_resolve_schema(
     registry: Mapping[str, oas.SchemaType],
     suggested_type_name: str,
@@ -278,43 +258,13 @@ def recursive_resolve_schema(
     common_types: ResolvedTypesMap = pmap()
 ) -> Parsed:
     final_types: PVector[TypeContext] = pvector()
-    if isinstance(schema, oas.StringValue):
-        return _process_string_or_enum(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
-    elif isinstance(schema, oas.IntegerValue):
-        return _process_integer(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
+    try:
+        processor = SCHEMA_PROCESSOR[type(schema)]
+    except KeyError:
+        raise NotImplementedError(f'Unsupported recursive type: {schema}')
 
-    elif isinstance(schema, oas.FloatValue):
-        return _process_float(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.BooleanValue):
-        return _process_bool(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.ObjectValue):
-        return _process_object(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.Reference):
-        return _process_reference(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.ArrayValue):
-        return _process_array(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.ObjectWithAdditionalProperties):
-        return _process_freeform_object(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.ProductSchemaType):
-        return _process_product_schema_type(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, (oas.UnionSchemaTypeAny, oas.UnionSchemaTypeOne)):
-        return _process_unions(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.EmptyValue):
-        return _process_empty_value(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    elif isinstance(schema, oas.InlinedObjectValue):
-        return _process_inlined_object_value(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
-
-    raise NotImplementedError(f'Unsupported recursive type: {schema}')
+    return processor(attr_name_normalizer, common_types, final_types, registry, schema, suggested_type_name)
 
 
 def _process_inlined_object_value(
@@ -646,35 +596,6 @@ def api_path_to_filepath(api_path: str, sep: str = '/') -> EndpointSegments:
     return EndpointSegments(pvector(segments))
 
 
-def pythonize_path_segment(seg: str) -> EndpointSegment:
-    placeholder = {'{', '}'}
-    remove = {'.', ','} | placeholder
-    is_placeholder = False
-    final = []
-    for char in seg:
-        if char in placeholder:
-            is_placeholder = True
-            continue
-        if char in remove:
-            continue
-        final.append(char)
-
-    final_underscored = underscore(''.join(final))
-    rv = final_underscored
-    if is_placeholder:
-        rv = f'by_{rv}'
-    else:
-        # version tags are usually numeric
-        if rv[0] in digits:
-            rv = f'v{rv}'
-
-    return EndpointSegment(
-        original=seg,
-        segment=rv,
-        placeholder=f'{{{final_underscored}}}' if is_placeholder else None
-    )
-
-
 PARAM_CONTAINERS: PMap[oas.ParamLocation, PVector[oas.OperationParameter]] = pmap(
     { oas.ParamLocation.QUERY:  pvector()  # type: ignore
     , oas.ParamLocation.PATH:   pvector()
@@ -699,7 +620,7 @@ def iter_supported_methods(
     common_types: ResolvedTypesMap,
     common_params: Mapping[oas.ParamTypeName, oas.OperationParameter],
     common_responses: Mapping[oas.ResponseTypeName, oas.Response],
-    common_schemas_registry: PMap[str, oas.SchemaType],
+    common_schemas_registry: NormalizedSchemas,
     path: oas.PathItem,
 ) -> SupportedMethods:
     """
@@ -812,7 +733,7 @@ def iter_supported_methods(
 
 
 def _process_response_type(
-    common_schemas_registry: PMap[str, oas.SchemaType],
+    common_schemas_registry: NormalizedSchemas,
     common_types: PMap[str, TypeContext],
     required_response_name: str,
     response: oas.Response,
@@ -941,3 +862,19 @@ merge_strategy = deepmerge.Merger(
     ["override"],
     ["override"]
 )
+
+
+SCHEMA_PROCESSOR =  {   oas.StringValue:                    _process_string_or_enum
+                    ,   oas.IntegerValue:                   _process_integer
+                    ,   oas.FloatValue:                     _process_float
+                    ,   oas.BooleanValue:                   _process_bool
+                    ,   oas.ObjectValue:                    _process_object
+                    ,   oas.Reference:                      _process_reference
+                    ,   oas.ArrayValue:                     _process_array
+                    ,   oas.ObjectWithAdditionalProperties: _process_freeform_object
+                    ,   oas.ProductSchemaType:              _process_product_schema_type
+                    ,   oas.UnionSchemaTypeAny:             _process_unions
+                    ,   oas.UnionSchemaTypeOne:             _process_unions
+                    ,   oas.EmptyValue:                     _process_empty_value
+                    ,   oas.InlinedObjectValue:             _process_inlined_object_value
+                    }
