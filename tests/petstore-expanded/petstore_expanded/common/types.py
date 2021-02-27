@@ -23,24 +23,12 @@ underscored = TypeConstructor
 AttrOverrides = Mapping[Union[property, Tuple[Type, str]], str]
 
 
-class Pet(NamedTuple):
-    """"""
-
-    name: str
-
-    id: int
-
-    tag: Optional[str] = None
-
-
 class NewPet(NamedTuple):
     """"""
 
     name: str
 
     tag: Optional[str] = None
-
-    id: Optional[int] = None
 
 
 class Error(NamedTuple):
@@ -49,3 +37,13 @@ class Error(NamedTuple):
     message: str
 
     code: int
+
+
+class Pet(NamedTuple):
+    """"""
+
+    name: str
+
+    id: int
+
+    tag: Optional[str] = None

@@ -23,6 +23,14 @@ underscored = TypeConstructor
 AttrOverrides = Mapping[Union[property, Tuple[Type, str]], str]
 
 
+class Error(NamedTuple):
+    """"""
+
+    message: str
+
+    code: int
+
+
 class Pet(NamedTuple):
     """"""
 
@@ -34,11 +42,3 @@ class Pet(NamedTuple):
 
 
 Sequence[Pet] = Pets
-
-
-class Error(NamedTuple):
-    """"""
-
-    message: str
-
-    code: int
