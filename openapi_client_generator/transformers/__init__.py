@@ -654,12 +654,22 @@ def iter_supported_methods(
             cookie_params=containers[oas.ParamLocation.COOKIE],
         )
 
+        default_headers_type = DEFAULT_HEADERS_TYPE
         if method.request_body:
             for content_type, meta in method.request_body.content.items():
                 if content_type.format in (oas.ContentTypeFormat.JSON,
                                            oas.ContentTypeFormat.ANYTHING,
                                            oas.ContentTypeFormat.FORM_URLENCODED):
                     request_schema = meta.schema
+                    default_headers_type = default_headers_type._replace(
+                        attrs=pvector([
+                            (
+                                item
+                                if item.name != "content_type"
+                                else item._replace(default=f"'{content_type.format.value}'")
+                            )
+                            for item in default_headers_type.attrs
+                        ]))
                     break
             else:
                 request_schema = list(method.request_body.content.items())[-1][1].schema
@@ -717,7 +727,7 @@ def iter_supported_methods(
         path_params_type, _types    = infer_params_type(params.path_params)
         headers_type, headers_types = infer_params_type(params.header_params,
                                                         name_normalizer=lambda x: underscore(x.lower()),
-                                                        default=DEFAULT_HEADERS_TYPE)
+                                                        default=default_headers_type)
 
         yield EndpointMethod(
             name=name,
