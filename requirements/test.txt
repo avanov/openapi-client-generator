@@ -2,4 +2,8 @@
 pytest>=5.4.1,<6.3
 coverage>=5.4,<5.5
 pytest-cov>=2.11,<2.12
-mypy==0.812
+mypy==0.961
+# typing support
+types-requests
+types-PyYAML
+types-setuptools

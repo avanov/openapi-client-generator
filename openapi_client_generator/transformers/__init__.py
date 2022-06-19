@@ -331,7 +331,7 @@ def _process_unions(
 
         final_types = final_types.extend(resolved_types)
     return Parsed(
-        actual_type_name=f'Union[{", ".join(options)}]',
+        actual_type_name=f'({" | ".join(options)})',
         default_value=None,
         final_types=final_types
     )

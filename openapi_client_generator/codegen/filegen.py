@@ -64,12 +64,13 @@ class SetupContext(NamedTuple):
 EMPTY_CONTEXT = EmptyContext()
 
 
-Context = Union[ EndpointContext
-               , ServiceContext
-               , ReadmeContext
-               , ManifestContext
-               , SetupContext
-               , EmptyContext ]
+Context =   ( EndpointContext
+            | ServiceContext
+            | ReadmeContext
+            | ManifestContext
+            | SetupContext
+            | EmptyContext
+            )
 
 
 class Binding(NamedTuple):

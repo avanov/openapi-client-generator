@@ -18,5 +18,5 @@ camelized = TypeConstructor & flags.GlobalNameOverride(lambda x: inflection.came
 dasherized = TypeConstructor & flags.GlobalNameOverride(inflection.dasherize)
 underscored = TypeConstructor
 
-AttrOverrides = Mapping[Union[property, Tuple[Type, str]], str]
-
+AttrKey = property | Tuple[Type, str]
+AttrOverrides = Mapping[AttrKey, str]
