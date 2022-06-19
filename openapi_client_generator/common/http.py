@@ -69,7 +69,8 @@ class Client(NamedTuple):
             method.value.upper(),
             url,
             params=query,
-            json=payload,
+            data=payload if headers['content-type'] == 'application/x-www-form-urlencoded' else None,
+            json=payload if headers['content-type'] == 'application/json' else None,
             headers={dasherize(k): v for k, v in headers.items() if v is not None}
         ).prepare()
 
